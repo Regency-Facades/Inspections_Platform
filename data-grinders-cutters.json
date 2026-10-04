@@ -1,0 +1,93 @@
+{
+  "categories": [
+    {
+      "category": "Angle Grinders - Small & Medium (115mm - 150mm)",
+      "tools": [
+        { "brand": "Makita", "model": "GA4530R (115mm 110V)", "vibration": 7.5, "note": "Standard small grinder." },
+        { "brand": "Makita", "model": "GA5030 (125mm 110V)", "vibration": 7.0, "note": "Slim body grinder." },
+        { "brand": "Makita", "model": "DGA504 (125mm 18V Cordless)", "vibration": 6.0, "note": "Brushless cordless." },
+        { "brand": "Makita", "model": "DGA517 (125mm 18V Brushless)", "vibration": 5.5, "note": "XPT dust/water resistant." },
+        { "brand": "Makita", "model": "GA1251 (125mm Paddle Switch)", "vibration": 7.5, "note": "Safety paddle switch." },
+        { "brand": "DeWalt", "model": "DWE4257 (125mm 110V)", "vibration": 6.5, "note": "With vibration handle." },
+        { "brand": "DeWalt", "model": "DWE4057 (115mm 110V)", "vibration": 7.0, "note": "Compact 110V." },
+        { "brand": "DeWalt", "model": "DCG405 (125mm 18V XR)", "vibration": 7.2, "note": "Brushless cordless." },
+        { "brand": "DeWalt", "model": "DCG414 (125mm 18V FlexVolt)", "vibration": 6.0, "note": "High power cordless." },
+        { "brand": "Bosch", "model": "GWS 850 CE (125mm)", "vibration": 7.0, "note": "Variable speed." },
+        { "brand": "Bosch", "model": "GWS 18V-10 SC (Cordless)", "vibration": 6.0, "note": "Soft start cordless." },
+        { "brand": "Bosch", "model": "GWS 18V-125 SC (Cordless)", "vibration": 5.5, "note": "Brushless 125mm." },
+        { "brand": "Hilti", "model": "AG 4S-A22 (125mm Cordless)", "vibration": 5.5, "note": "With vibration-reduced handle." },
+        { "brand": "Hilti", "model": "AG 4D-A22 (125mm Cordless)", "vibration": 6.0, "note": "Deadman switch." },
+        { "brand": "Hilti", "model": "AG 125-10D (110V)", "vibration": 6.5, "note": "Professional corded." },
+        { "brand": "Milwaukee", "model": "M18 CAG125 (Fuel 125mm)", "vibration": 6.5, "note": "Brushless Fuel." },
+        { "brand": "Milwaukee", "model": "M18 CAG115 (Fuel 115mm)", "vibration": 7.0, "note": "Compact Fuel." },
+        { "brand": "Metabo", "model": "W 850-125 (110V)", "vibration": 7.5, "note": "Robust corded." },
+        { "brand": "Metabo", "model": "WB 18 LTX BL 125 (Cordless)", "vibration": 6.0, "note": "Brushless cordless." },
+        { "brand": "Hitachi / Metabo HPT", "model": "G12SR4 (115mm)", "vibration": 7.5, "note": "Classic slim body." }
+      ]
+    },
+    {
+      "category": "Large Angle Grinders & Cut-off (180mm - 300mm)",
+      "tools": [
+        { "brand": "Makita", "model": "GA9020 (230mm 110V)", "vibration": 8.5, "note": "Large grinder." },
+        { "brand": "Makita", "model": "GA9040 (230mm Paddle)", "vibration": 8.0, "note": "Paddle switch safety." },
+        { "brand": "DeWalt", "model": "DWE4559 (230mm 110V)", "vibration": 9.0, "note": "Heavy duty large." },
+        { "brand": "DeWalt", "model": "DCG418 (230mm 18V FlexVolt)", "vibration": 7.5, "note": "High power cordless." },
+        { "brand": "Bosch", "model": "GWS 24-300 J (300mm Cut-off)", "vibration": 9.5, "note": "Large cut-off." },
+        { "brand": "Bosch", "model": "GWS 20-230 (230mm)", "vibration": 9.0, "note": "Standard large." },
+        { "brand": "Hilti", "model": "AG 22-A22 (230mm Cordless)", "vibration": 8.0, "note": "Cordless large." },
+        { "brand": "Milwaukee", "model": "M18 CAG230 (Fuel 230mm)", "vibration": 8.5, "note": "Brushless Fuel large." },
+        { "brand": "Metabo", "model": "W 24-230 MVT (230mm)", "vibration": 8.5, "note": "Vibration tech." }
+      ]
+    },
+    {
+      "category": "Die Grinders & Straight Grinders",
+      "tools": [
+        { "brand": "Makita", "model": "DA3010F (Straight)", "vibration": 5.0, "note": "Straight grinder." },
+        { "brand": "Makita", "model": "DG180 (18V Cordless Die)", "vibration": 4.5, "note": "Cordless die." },
+        { "brand": "DeWalt", "model": "DWE460 (110V Die)", "vibration": 6.0, "note": "Variable speed die." },
+        { "brand": "Bosch", "model": "GGS 28 CE (Straight)", "vibration": 4.5, "note": "Professional straight." },
+        { "brand": "Hilti", "model": "DG 2 (Pneumatic)", "vibration": 5.5, "note": "Air die grinder." }
+      ]
+    },
+    {
+      "category": "Petrol Cut-off Saws & Disc Cutters",
+      "tools": [
+        { "brand": "Stihl", "model": "TS 420 (14 inch)", "vibration": 6.5, "note": "Standard petrol cutter." },
+        { "brand": "Stihl", "model": "TS 700 (16 inch)", "vibration": 7.5, "note": "Large petrol cutter." },
+        { "brand": "Stihl", "model": "TS 800 (16 inch)", "vibration": 7.0, "note": "High power petrol." },
+        { "brand": "Husqvarna", "model": "K770 (14 inch)", "vibration": 7.0, "note": "Standard petrol cutter." },
+        { "brand": "Husqvarna", "model": "K970 (16 inch)", "vibration": 7.5, "note": "Large petrol cutter." },
+        { "brand": "Hilti", "model": "DSH 700i (14 inch)", "vibration": 6.0, "note": "Active torque control." },
+        { "brand": "Hilti", "model": "DSH 900 (16 inch)", "vibration": 7.0, "note": "Large petrol cutter." },
+        { "brand": "Makita", "model": "EK7651H (14 inch)", "vibration": 7.0, "note": "Petrol power cutter." },
+        { "brand": "Makita", "model": "EH6500H (12 inch)", "vibration": 6.5, "note": "Engine cutter." }
+      ]
+    },
+    {
+      "category": "Cordless & Electric Cut-off Saws",
+      "tools": [
+        { "brand": "Hilti", "model": "SCM 53-A (54V Cordless)", "vibration": 5.0, "note": "Battery cut-off saw." },
+        { "brand": "Hilti", "model": "SCM 22-A (22V Cordless)", "vibration": 4.5, "note": "Compact battery cutter." },
+        { "brand": "Makita", "model": "DCC500 (18V Cordless)", "vibration": 4.0, "note": "Cordless concrete cutter." },
+        { "brand": "DeWalt", "model": "DCS690 (18V XR Cut-off)", "vibration": 5.5, "note": "Cordless cut-off." },
+        { "brand": "Milwaukee", "model": "M18 FCS (Fuel Cut-off)", "vibration": 5.0, "note": "Brushless Fuel cutter." }
+      ]
+    },
+    {
+      "category": "Sanders (Orbital, Belt, & Detail)",
+      "tools": [
+        { "brand": "Makita", "model": "BO5041 (Orbital)", "vibration": 6.5, "note": "Standard orbital." },
+        { "brand": "Makita", "model": "BO6050 (Random Orbital)", "vibration": 5.5, "note": "Random orbit." },
+        { "brand": "Makita", "model": "9920 (Belt Sander)", "vibration": 8.0, "note": "Large belt sander." },
+        { "brand": "Makita", "model": "DPN500 (Detail Sander)", "vibration": 5.0, "note": "Palm sander." },
+        { "brand": "DeWalt", "model": "DWE6423 (Orbital)", "vibration": 6.0, "note": "Variable speed orbital." },
+        { "brand": "DeWalt", "model": "DWE6411 (Belt Sander)", "vibration": 7.5, "note": "Heavy duty belt." },
+        { "brand": "Bosch", "model": "GEX 125-150 AVE", "vibration": 5.5, "note": "Random orbital." },
+        { "brand": "Bosch", "model": "GSS 280 AVE (Sheet)", "vibration": 6.0, "note": "Sheet sander." },
+        { "brand": "Festool", "model": "ETS 150/5 (Orbital)", "vibration": 3.0, "note": "Premium low vibration." },
+        { "brand": "Festool", "model": "RO 150 FEQ (Rotex)", "vibration": 3.5, "note": "Rotex sander." },
+        { "brand": "Milwaukee", "model": "M18 ROS (Random Orbital)", "vibration": 5.5, "note": "Cordless orbital." }
+      ]
+    }
+  ]
+}

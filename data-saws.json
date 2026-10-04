@@ -1,0 +1,84 @@
+{
+  "categories": [
+    {
+      "category": "Circular Saws (Corded & Cordless)",
+      "tools": [
+        { "brand": "Makita", "model": "DSS611 (18V Circular)", "vibration": 2.5, "note": "Standard cordless circular." },
+        { "brand": "Makita", "model": "HS7601 (240V Circular)", "vibration": 3.0, "note": "Standard corded 190mm." },
+        { "brand": "Makita", "model": "HS0600 (240V Plunge)", "vibration": 2.0, "note": "Track saw compatible." },
+        { "brand": "DeWalt", "model": "DCS570 (18V XR Circular)", "vibration": 3.0, "note": "Brushless 190mm." },
+        { "brand": "DeWalt", "model": "DWE575K (240V Circular)", "vibration": 3.5, "note": "Heavy duty corded." },
+        { "brand": "Bosch", "model": "GKS 18V-57 G (Cordless)", "vibration": 2.5, "note": "Professional 165mm." },
+        { "brand": "Bosch", "model": "GKS 190 (240V Circular)", "vibration": 3.5, "note": "Standard corded." },
+        { "brand": "Milwaukee", "model": "M18 CCS55 (Fuel Circular)", "vibration": 2.0, "note": "Brushless Fuel." },
+        { "brand": "Festool", "model": "TS 55 FEBQ (Track Saw)", "vibration": 1.5, "note": "Premium low vibration." },
+        { "brand": "Hilti", "model": "SCM 22-A (Cordless Cut-off)", "vibration": 4.5, "note": "Diamond cutting concrete." }
+      ]
+    },
+    {
+      "category": "Reciprocating Saws (Sawzalls)",
+      "tools": [
+        { "brand": "Makita", "model": "JR3050T (240V Recip)", "vibration": 10.0, "note": "Heavy demolition." },
+        { "brand": "Makita", "model": "DJR186 (18V Recip)", "vibration": 8.5, "note": "Cordless AVT." },
+        { "brand": "DeWalt", "model": "D25902K (240V Recip)", "vibration": 12.0, "note": "Heavy demolition." },
+        { "brand": "DeWalt", "model": "DCS380 (18V XR Recip)", "vibration": 9.0, "note": "Brushless cordless." },
+        { "brand": "Bosch", "model": "GSA 18V-32 (Cordless)", "vibration": 8.0, "note": "Professional." },
+        { "brand": "Bosch", "model": "GSA 1300 PCE (240V)", "vibration": 11.0, "note": "Variable speed." },
+        { "brand": "Milwaukee", "model": "M18 FSA (Fuel Recip)", "vibration": 9.5, "note": "One-stroke technology." },
+        { "brand": "Hilti", "model": "SR 2T-A22 (Cordless)", "vibration": 7.5, "note": "AVR engaged." }
+      ]
+    },
+    {
+      "category": "Chop Saws, Mitre Saws & Cut-off",
+      "tools": [
+        { "brand": "Makita", "model": "LS1018L (Sliding Mitre)", "vibration": 2.5, "note": "260mm slide compound." },
+        { "brand": "Makita", "model": "GA7020 (Angle Grinder/Cut-off)", "vibration": 8.5, "note": "Large 230mm grinder." },
+        { "brand": "DeWalt", "model": "DWS777 (Sliding Mitre)", "vibration": 3.0, "note": "216mm slide compound." },
+        { "brand": "DeWalt", "model": "DWE460 (Angle Grinder)", "vibration": 7.0, "note": "125mm with guard." },
+        { "brand": "Bosch", "model": "GCM 12 GDL (Sliding Mitre)", "vibration": 2.0, "note": "Brushless 305mm." },
+        { "brand": "Bosch", "model": "GWS 24-300 J (Large Cut-off)", "vibration": 9.0, "note": "300mm cut-off." },
+        { "brand": "Milwaukee", "model": "M18 FMS300 (Fuel Mitre)", "vibration": 2.5, "note": "Cordless sliding mitre." },
+        { "brand": "Hilti", "model": "SCM 53-A (Cut-off Saw)", "vibration": 5.0, "note": "54V concrete cut-off." },
+        { "brand": "Stihl", "model": "TS 420 (Cut-off Saw)", "vibration": 6.5, "note": "Petrol disc cutter." }
+      ]
+    },
+    {
+      "category": "Pendular / Oscillating Multi-Tools",
+      "tools": [
+        { "brand": "Makita", "model": "DTM51 (18V Multi-tool)", "vibration": 7.0, "note": "Cordless oscillating." },
+        { "brand": "Makita", "model": "TM3010C (240V Multi-tool)", "vibration": 6.5, "note": "Variable speed." },
+        { "brand": "DeWalt", "model": "DCS355 (18V XR Multi-tool)", "vibration": 6.0, "note": "Brushless cordless." },
+        { "brand": "DeWalt", "model": "DWE315 (240V Multi-tool)", "vibration": 7.5, "note": "Quick change." },
+        { "brand": "Bosch", "model": "GOP 18V-28 (Multi-tool)", "vibration": 6.5, "note": "Starlock compatible." },
+        { "brand": "Bosch", "model": "PMF 350 CES (240V)", "vibration": 8.0, "note": "Universal oscillating." },
+        { "brand": "Milwaukee", "model": "M18 FMT (Fuel Multi-tool)", "vibration": 6.0, "note": "Brushless Fuel." },
+        { "brand": "Festool", "model": "Vecturo OSC 18", "vibration": 4.5, "note": "Premium low vibration." }
+      ]
+    },
+    {
+      "category": "Jigsaws",
+      "tools": [
+        { "brand": "Makita", "model": "DJV182 (18V Jigsaw)", "vibration": 7.0, "note": "Barrel grip cordless." },
+        { "brand": "Makita", "model": "JV0600K (240V Jigsaw)", "vibration": 8.0, "note": "Orbital action." },
+        { "brand": "DeWalt", "model": "DCS334 (18V XR Jigsaw)", "vibration": 6.5, "note": "Brushless cordless." },
+        { "brand": "DeWalt", "model": "DWE341 (240V Jigsaw)", "vibration": 8.5, "note": "Variable speed." },
+        { "brand": "Bosch", "model": "GST 18V-LI (Cordless)", "vibration": 7.0, "note": "Professional." },
+        { "brand": "Bosch", "model": "GST 150 BCE (240V)", "vibration": 7.5, "note": "Heavy duty." },
+        { "brand": "Festool", "model": "Carvex PSC 420", "vibration": 4.0, "note": "Premium low vibration." }
+      ]
+    },
+    {
+      "category": "Chainsaws (Petrol & Cordless)",
+      "tools": [
+        { "brand": "Stihl", "model": "MS 170 (Petrol)", "vibration": 3.5, "note": "Light duty homeowner." },
+        { "brand": "Stihl", "model": "MS 261 (Petrol)", "vibration": 4.0, "note": "Professional felling." },
+        { "brand": "Stihl", "model": "MS 500i (Petrol)", "vibration": 5.5, "note": "Large professional." },
+        { "brand": "Stihl", "model": "MSA 200 C-B (Battery)", "vibration": 2.5, "note": "Cordless professional." },
+        { "brand": "Husqvarna", "model": "450 Rancher (Petrol)", "vibration": 4.5, "note": "All-round felling." },
+        { "brand": "Husqvarna", "model": "540i XP (Battery)", "vibration": 2.8, "note": "Cordless XP." },
+        { "brand": "Makita", "model": "DUC122 (18Vx2 Chainsaw)", "vibration": 3.0, "note": "Cordless 300mm." },
+        { "brand": "DeWalt", "model": "DCS361 (18V XR Chainsaw)", "vibration": 3.5, "note": "Cordless 300mm." }
+      ]
+    }
+  ]
+}

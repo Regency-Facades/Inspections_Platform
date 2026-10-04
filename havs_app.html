@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HAVS Daily Briefing</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="branding.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+    <style>
+        :root {
+            --wa-header: #075E54;
+            --wa-header-light: #128C7E;
+            --wa-bg: #E5DDD5;
+            --wa-bubble-app: #FFFFFF;
+            --wa-bubble-user: #DCF8C6;
+            --wa-text-grey: #667781;
+            --wa-green-btn: #25D366;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--wa-bg);
+            background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+            background-blend-mode: overlay;
+            height: 100vh;
+            height: -webkit-fill-available;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        header {
+            background-color: var(--wa-header);
+            color: white;
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            z-index: 10;
+            min-height: 60px;
+        }
+        .header-info { display: flex; flex-direction: column; }
+        .shared-brand-row { display: flex; align-items: center; gap: 7px; }
+        .shared-brand-logo { display: none; max-width: 64px; height: 24px; object-fit: contain; border-radius: 3px; background: white; padding: 2px; }
+        .shared-brand-title { font-weight: 700; font-size: 0.72rem; }
+        .header-title { font-weight: bold; font-size: 1.1rem; }
+        .header-subtitle { font-size: 0.8rem; opacity: 0.8; }
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        .portal-link { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border-radius: 5px; background: rgba(0,0,0,0.3); color: white; font-size: 0.7rem; font-weight: bold; text-decoration: none; text-transform: uppercase; }
+        .portal-link:hover { background: rgba(0,0,0,0.45); }
+        .settings-btn { width: 34px; height: 34px; padding: 0; border: 1px solid rgba(255,255,255,0.35); border-radius: 50%; background: rgba(0,0,0,0.2); color: white; font-size: 1rem; cursor: pointer; }
+        .settings-btn:hover { background: rgba(0,0,0,0.4); }
+        .connection-error { color: #b91c1c; font-size: 0.85rem; text-align: left; }
+        #chat-container {
+            flex: 1; overflow-y: auto; padding: 15px;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .bubble {
+            max-width: 85%; padding: 8px 12px; border-radius: 8px;
+            font-size: 0.95rem; line-height: 1.4; position: relative;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1); word-wrap: break-word;
+        }
+        .bubble.app { background-color: var(--wa-bubble-app); align-self: flex-start; border-top-left-radius: 0; }
+        .bubble.user { background-color: var(--wa-bubble-user); align-self: flex-end; border-top-right-radius: 0; }
+        .bubble .time { font-size: 0.65rem; color: var(--wa-text-grey); float: right; margin-left: 10px; margin-top: 5px; }
+        .limit-card {
+            background: white; border-radius: 8px; padding: 10px; margin: 5px 0;
+            border-left: 5px solid #ccc; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .limit-card.safe { border-left-color: #25D366; }
+        .limit-card.warn { border-left-color: #FFC107; }
+        .limit-card.danger { border-left-color: #FF5252; }
+        .limit-title { font-weight: bold; margin-bottom: 5px; font-size: 0.95rem; }
+        .limit-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 3px; }
+        #input-area {
+            background-color: #F0F2F5; padding: 8px;
+            display: flex; align-items: center; gap: 8px; z-index: 10;
+            flex-shrink: 0;
+        }
+        #text-input {
+            flex: 1; padding: 10px 15px; border-radius: 20px;
+            border: none; outline: none; font-size: 1rem; background: white;
+        }
+        .send-btn {
+            background: var(--wa-header-light);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .action-btn {
+            background-color: var(--wa-header-light); color: white; border: none;
+            padding: 8px 16px; border-radius: 15px; margin: 5px 5px 0 0;
+            font-size: 0.9rem; cursor: pointer;
+        }
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100;
+            justify-content: center; align-items: center; flex-direction: column;
+        }
+        .modal-content {
+            background: white; padding: 20px; border-radius: 10px;
+            width: 90%; max-width: 400px; text-align: center;
+        }
+        .modal-content h3 { margin-top: 0; color: var(--wa-header); }
+        .form-label {
+            display: block;
+            text-align: left;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0 4px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .modal input[type="text"], .modal input[type="number"], .modal input[type="url"], .modal input[type="password"] {
+            width: 100%; padding: 12px; margin: 0 0 5px 0;
+            border: 1px solid #ccc; border-radius: 5px;
+            box-sizing: border-box; font-size: 1rem;
+        }
+        .modal button {
+            background: var(--wa-green-btn); color: white; border: none;
+            padding: 12px 20px; border-radius: 5px; margin: 5px;
+            cursor: pointer; font-weight: bold; font-size: 1rem;
+        }
+        .modal button.danger { background: #FF5252; }
+        .modal button.secondary { background: var(--wa-header-light); }
+        #camera-video { width: 100%; max-height: 300px; background: black; border-radius: 8px; }
+
+        .time-input-row {
+            display: flex; gap: 8px; margin: 10px 0;
+            align-items: center; justify-content: center; flex-wrap: wrap;
+        }
+        .time-input-row input {
+            width: 80px; padding: 10px; border: 1px solid #ccc;
+            border-radius: 5px; font-size: 1rem; text-align: center;
+        }
+        .time-input-row select {
+            padding: 10px; border: 1px solid #ccc;
+            border-radius: 5px; font-size: 1rem; background: white;
+        }
+        .time-input-row button {
+            background: var(--wa-header-light); color: white; border: none;
+            padding: 10px 16px; border-radius: 5px; font-size: 0.9rem;
+            cursor: pointer; font-weight: bold;
+        }
+        .time-presets {
+            display: flex; gap: 5px; flex-wrap: wrap;
+            justify-content: center; margin-top: 8px;
+        }
+        .time-presets button {
+            background: #e0e0e0; color: #333; border: none;
+            padding: 6px 12px; border-radius: 12px; font-size: 0.8rem; cursor: pointer;
+        }
+        .time-presets button:hover { background: var(--wa-header-light); color: white; }
+
+        .search-container {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+        }
+        .search-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+        .search-results {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        .search-result-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: white;
+            border: 1px solid #eee;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .search-result-btn:hover { background: #f0f0f0; }
+        .search-result-btn strong { color: var(--wa-header); }
+
+        .manual-entry-form {
+            background: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+        }
+        .manual-entry-form input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .manual-entry-form button {
+            background: var(--wa-header-light);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            margin-top: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .search-btn {
+            background: #4285F4 !important;
+            display: inline-block;
+            margin-left: 5px;
+            padding: 8px 12px !important;
+            font-size: 0.8rem !important;
+        }
+        .input-row {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .input-row input {
+            flex: 1;
+            margin: 5px 0 !important;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-info">
+            <div class="shared-brand-row"><img id="shared-brand-logo" class="shared-brand-logo" alt="Organization logo"><span class="shared-brand-title" id="shared-brand-title"></span></div>
+            <span class="header-subtitle" id="header-project">HAVS Briefing</span>
+            <span class="header-subtitle" id="header-manager">Setup Required</span>
+            <span class="header-subtitle" id="cloud-status" role="status">Local-only storage</span>
+        </div>
+        <div class="header-actions">
+            <a id="supervisor-portal-link" class="portal-link" href="supervisor.html" aria-label="Return to Supervisor Portal"><span aria-hidden="true">&larr;</span><span>Portal</span></a>
+            <button class="settings-btn" id="supabase-settings-button" type="button" aria-label="Supabase connection settings" title="Supabase connection settings">&#9881;</button>
+        </div>
+    </header>
+    <div id="chat-container"></div>
+    <div id="input-area">
+        <input type="text" id="text-input">
+        <button class="send-btn" id="send-btn">&#10148;</button>
+    </div>
+
+    <div id="setup-modal" class="modal">
+        <div class="modal-content">
+            <h3>Site & Manager Setup</h3>
+            <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">Enter your company, project and manager details.</p>
+            <label class="form-label" for="setup-company">Company Name (your employer)</label>
+            <input type="text" id="setup-company">
+            <label class="form-label" for="setup-project">Project Name</label>
+            <input type="text" id="setup-project">
+            <label class="form-label" for="setup-number">Project Number</label>
+            <input type="text" id="setup-number">
+            <label class="form-label" for="setup-name">Manager Name</label>
+            <input type="text" id="setup-name">
+            <label class="form-label" for="setup-role">Manager Role / Position</label>
+            <input type="text" id="setup-role">
+            <p style="font-size:0.85rem; color:#666; margin:10px 0 5px;">Company Logo (optional):</p>
+            <input type="file" id="setup-logo" accept="image/*">
+            <br>
+            <button id="setup-save">Save & Start</button>
+        </div>
+    </div>
+
+    <div id="camera-modal" class="modal">
+        <div class="modal-content" style="background: #222; color: white;">
+            <h3 style="color:white;">Inspect Tool Condition</h3>
+            <p style="font-size:0.85rem; color:#ccc;">Take a clear photo of the tool.</p>
+            <video id="camera-video" autoplay playsinline></video>
+            <canvas id="camera-canvas" style="display:none;"></canvas>
+            <div style="margin-top: 15px;">
+                <button id="cam-capture" style="background: var(--wa-green-btn);">Capture</button>
+                <button id="cam-cancel" class="danger">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sig-modal" class="modal">
+        <div class="modal-content">
+            <h3>Manager Signature</h3>
+            <div style="border: 2px solid #ccc; border-radius: 5px; margin: 10px 0; background: #f9f9f9;">
+                <canvas id="sig-canvas" width="350" height="200" style="width: 100%; height: 200px; touch-action: none;"></canvas>
+            </div>
+            <button id="sig-clear" class="danger">Clear</button>
+            <button id="sig-save">Confirm & Generate PDF</button>
+        </div>
+    </div>
+
+    <div id="supabase-modal" class="modal">
+        <form id="supabase-form" class="modal-content" novalidate>
+            <h3>Supabase Connection</h3>
+            <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">Credentials stay on this device and are only shown here when you open this dialog.</p>
+            <label class="form-label" for="supabase-url">Project URL</label>
+            <input type="url" id="supabase-url" autocomplete="url" required>
+            <label class="form-label" for="supabase-key">Anon key</label>
+            <input type="password" id="supabase-key" autocomplete="off" required>
+            <p id="supabase-connection-status" class="connection-error" role="status" aria-live="polite"></p>
+            <button type="button" id="supabase-test-storage" class="secondary">Test Storage</button>
+            <button type="submit">Connect</button>
+            <button type="button" id="supabase-cancel" class="secondary">Cancel</button>
+        </form>
+    </div>
+
+    <script>
+        let TOOL_DB = [];
+        let searchCounter = 0;
+        let timeCounter = 0;
+        let state = {
+            setup: { company: '', project: '', number: '', name: '', role: '', logo: null },
+            currentOperative: { name: '', employer: '', area: '', tools: [] },
+            step: 'IDLE',
+            currentToolSelection: null,
+            currentPhoto: null,
+            stream: null
+        };
+
+        let SUPABASE_URL = localStorage.getItem('tw_supa_url') || '';
+        let SUPABASE_ANON_KEY = localStorage.getItem('tw_supa_key') || '';
+        let supabaseClient = null;
+        let cloudRequired = false;
+        let branding = SharedBranding.readLocal();
+
+        function applySharedBranding() {
+            const header = document.querySelector('header');
+            const brandTitle = document.getElementById('shared-brand-title');
+            const brandLogo = document.getElementById('shared-brand-logo');
+            header.style.backgroundColor = branding.color || '#075E54';
+            header.style.color = branding.textColor || '#ffffff';
+            brandTitle.textContent = branding.title || 'HAVS Briefing';
+            if (branding.logoUrl) {
+                brandLogo.src = branding.logoUrl;
+                brandLogo.style.display = 'block';
+            } else {
+                brandLogo.style.display = 'none';
+            }
+        }
+
+        function reportLogo() {
+            return branding.logoDataUrl || state.setup.logo || '';
+        }
+        let lastFailedHavsUpload = null;
+
+        function setCloudStatus(message) {
+            const status = document.getElementById('cloud-status');
+            if (status) status.textContent = message;
+        }
+
+        function initializeCloudSync() {
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) {
+                setCloudStatus('Local-only storage');
+                return;
+            }
+            try {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                setCloudStatus('Cloud sync ready');
+            } catch (error) {
+                console.warn('Supabase initialization failed:', error);
+                setCloudStatus('Local-only storage');
+            }
+        }
+
+        function openSupabaseSettings() {
+            document.getElementById('supabase-url').value = SUPABASE_URL;
+            document.getElementById('supabase-key').value = SUPABASE_ANON_KEY;
+            document.getElementById('supabase-connection-status').textContent = '';
+            document.getElementById('supabase-test-storage').textContent = lastFailedHavsUpload ? 'Retry failed PDF upload' : 'Test Storage';
+            document.getElementById('supabase-modal').style.display = 'flex';
+        }
+
+        async function connectSupabase(event) {
+            event.preventDefault();
+            const dbUrl = document.getElementById('supabase-url').value.trim();
+            const dbKey = document.getElementById('supabase-key').value.trim();
+            const status = document.getElementById('supabase-connection-status');
+            status.textContent = 'Checking connection...';
+            try {
+                const client = window.supabase.createClient(dbUrl, dbKey);
+                const params = new URLSearchParams(window.location.search);
+                const token = params.get('token');
+                if (cloudRequired && token) {
+                    const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
+                    if (error) throw error;
+                    if (!data) throw new Error('This supervisor link is not active in the selected Supabase project.');
+                } else {
+                    const { error } = await client.from('clients').select('id').limit(1);
+                    if (error) throw error;
+                }
+                localStorage.setItem('tw_supa_url', dbUrl);
+                localStorage.setItem('tw_supa_key', dbKey);
+                SUPABASE_URL = dbUrl;
+                SUPABASE_ANON_KEY = dbKey;
+                supabaseClient = client;
+                setCloudStatus('Cloud sync ready');
+                document.getElementById('supabase-modal').style.display = 'none';
+            } catch (error) {
+                status.textContent = error.message || 'Could not connect to Supabase. Check the URL, anon key, tables, and access policies.';
+            }
+        }
+
+        async function testSupabaseStorage() {
+            const status = document.getElementById('supabase-connection-status');
+            const dbUrl = document.getElementById('supabase-url').value.trim();
+            const dbKey = document.getElementById('supabase-key').value.trim();
+            if (!dbUrl || !dbKey) {
+                status.textContent = 'Enter the project URL and anon key before testing Storage.';
+                return;
+            }
+            if (!window.supabase) {
+                status.textContent = 'Supabase client could not be loaded. Check your connection and reload the app.';
+                return;
+            }
+            const failedUpload = lastFailedHavsUpload;
+            const filePath = failedUpload ? failedUpload.filePath : 'havs/havs_storage_test/HAVS_Storage_Test_' + Date.now() + '.pdf';
+            status.textContent = failedUpload ? 'Retrying the failed report at its original Storage path...' : 'Testing Storage upload and cleanup...';
+            try {
+                const client = window.supabase.createClient(dbUrl, dbKey);
+                const storage = client.storage.from('reports');
+                const testPdf = failedUpload ? failedUpload.pdfBlob : new Blob(['%PDF-1.4\n', ' '.repeat(300 * 1024), '\n%%EOF'], { type: 'application/pdf' });
+                const { error: uploadError } = await storage.upload(filePath, testPdf, {
+                    contentType: 'application/pdf',
+                    upsert: true
+                });
+                if (uploadError) throw uploadError;
+                if (failedUpload) {
+                    const { data } = storage.getPublicUrl(filePath);
+                    failedUpload.audit.pdfUrl = data ? data.publicUrl : '';
+                    if (!failedUpload.audit.pdfUrl) throw new Error('PDF uploaded but Supabase did not return its public URL.');
+                    const { error: auditError } = await client.from('audits').upsert([failedUpload.audit], { onConflict: 'id' });
+                    if (auditError) throw auditError;
+                    saveHavsAuditLocally(failedUpload.audit);
+                    lastFailedHavsUpload = null;
+                    document.getElementById('supabase-test-storage').textContent = 'Test Storage';
+                    status.textContent = 'The failed report PDF and its audit record have now synced successfully.';
+                } else {
+                    const { error: removeError } = await storage.remove([filePath]);
+                    if (removeError) throw removeError;
+                    status.textContent = 'PDF Storage test passed: temporary PDF uploaded and removed.';
+                }
+            } catch (error) {
+                const message = getCloudErrorMessage(error);
+                status.textContent = message.toLowerCase().includes('load failed')
+                    ? `Upload failed before Supabase returned an HTTP response (Load failed). (PDF ${(testPdfSize(failedUpload) / (1024 * 1024)).toFixed(1)} MB; bucket reports; path ${filePath})`
+                    : `${failedUpload ? 'Report retry' : 'PDF Storage test'} failed: ${message} (PDF ${(testPdfSize(failedUpload) / (1024 * 1024)).toFixed(1)} MB; bucket reports; path ${filePath})`;
+            }
+        }
+
+        function testPdfSize(failedUpload) {
+            return failedUpload ? failedUpload.pdfBlob.size : 300 * 1024;
+        }
+
+        document.getElementById('supabase-settings-button').onclick = openSupabaseSettings;
+        document.getElementById('supabase-cancel').onclick = function() { document.getElementById('supabase-modal').style.display = 'none'; };
+        document.getElementById('supabase-form').addEventListener('submit', connectSupabase);
+        document.getElementById('supabase-test-storage').addEventListener('click', testSupabaseStorage);
+
+        function getAuditProjectIds(projectName) {
+            function readArray(key) {
+                try {
+                    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (error) { return []; }
+            }
+            const clients = readArray('tw_clients');
+            const sites = readArray('tw_sites');
+            const matchedSite = sites.find(site => String(site.name || '').toLowerCase() === projectName.toLowerCase());
+            const matchedClient = (matchedSite && clients.find(client => String(client.id) === String(matchedSite.clientId))) ||
+                clients.find(client => String(client.name || '').toLowerCase() === projectName.toLowerCase());
+            return { clientId: matchedClient ? matchedClient.id : null, siteId: matchedSite ? matchedSite.id : null };
+        }
+
+        function saveHavsAuditLocally(audit) {
+            try {
+                const saved = JSON.parse(localStorage.getItem('havs_records') || '[]');
+                const records = Array.isArray(saved) ? saved : [];
+                const index = records.findIndex(record => record && record.id === audit.id);
+                if (index >= 0) records[index] = audit;
+                else records.push(audit);
+                localStorage.setItem('havs_records', JSON.stringify(records));
+            } catch (error) {
+                console.warn('Could not save HAVS audit locally:', error);
+            }
+        }
+
+        function getCloudErrorMessage(error) {
+            if (!error) return 'Unknown Supabase error';
+            return [
+                error.message || String(error),
+                error.code ? 'Code: ' + error.code : '',
+                error.details ? 'Details: ' + error.details : '',
+                error.hint ? 'Hint: ' + error.hint : ''
+            ].filter(Boolean).join(' ');
+        }
+
+        function isRetryableNetworkError(error) {
+            const message = getCloudErrorMessage(error).toLowerCase();
+            return message.includes('load failed') || message.includes('failed to fetch') || message.includes('networkerror');
+        }
+
+        async function uploadHavsPdf(audit, pdfBlob, fileName) {
+            if (!supabaseClient) return null;
+            const filePath = 'havs/' + audit.id + '/HAVS_' + audit.id + '.pdf';
+            const pdfSizeMb = (pdfBlob.size / (1024 * 1024)).toFixed(1);
+            try {
+                const maxAttempts = 3;
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    try {
+                        const uploadRequest = supabaseClient.storage.from('reports').upload(filePath, pdfBlob, {
+                            contentType: 'application/pdf',
+                            upsert: true
+                        });
+                        const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('PDF upload timed out after 30 seconds')), 30000));
+                        const { error } = await Promise.race([uploadRequest, timeout]);
+                        if (error) throw error;
+                        break;
+                    } catch (error) {
+                        if (!isRetryableNetworkError(error) || attempt === maxAttempts) throw error;
+                        setCloudStatus(`Network interrupted; retrying PDF upload (${attempt + 1}/${maxAttempts})...`);
+                        await new Promise(resolve => setTimeout(resolve, attempt * 700));
+                    }
+                }
+                const { data } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
+                return data ? data.publicUrl : null;
+            } catch (error) {
+                throw new Error(`${getCloudErrorMessage(error)} (PDF ${pdfSizeMb} MB; bucket reports; path ${filePath})`);
+            }
+        }
+
+        async function syncHavsAudit(audit, pdfBlob, fileName) {
+            saveHavsAuditLocally(audit);
+            lastFailedHavsUpload = null;
+            if (!supabaseClient) {
+                setCloudStatus('Saved locally; cloud keys not configured');
+                if (cloudRequired) throw new Error('Supabase is not connected. Return to the Supervisor Portal and configure the cloud connection.');
+                return;
+            }
+            let syncStage = 'PDF upload';
+            try {
+                audit.pdfUrl = await uploadHavsPdf(audit, pdfBlob, fileName) || '';
+                if (!audit.pdfUrl) throw new Error('Supabase uploaded the HAVS PDF but did not return its public URL.');
+                saveHavsAuditLocally(audit);
+                syncStage = 'audit record save';
+                const insertRequest = supabaseClient.from('audits').insert([audit]);
+                const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Audit sync timed out after 30 seconds')), 30000));
+                const { error } = await Promise.race([insertRequest, timeout]);
+                if (error) throw error;
+                setCloudStatus('Audit and PDF synced');
+            } catch (error) {
+                if (syncStage === 'PDF upload') {
+                    lastFailedHavsUpload = {
+                        audit,
+                        pdfBlob,
+                        filePath: 'havs/' + audit.id + '/HAVS_' + audit.id + '.pdf'
+                    };
+                }
+                const message = getCloudErrorMessage(error);
+                console.error('HAVS Supabase ' + syncStage + ' failed:', error);
+                setCloudStatus('Supabase ' + syncStage + ' failed');
+                throw new Error(syncStage + ' failed: ' + message);
+            }
+        }
+
+        const chatContainer = document.getElementById('chat-container');
+        const textInput = document.getElementById('text-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        async function validateSupervisorLink(params) {
+            const token = params.get('token');
+            if (!token) return true;
+            const cloudLink = params.get('cloud') === '1';
+            const dbUrl = localStorage.getItem('tw_supa_url') || '';
+            const dbKey = localStorage.getItem('tw_supa_key') || '';
+            if (dbUrl && dbKey && window.supabase) {
+                try {
+                    const client = window.supabase.createClient(dbUrl, dbKey);
+                    const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
+                    if (cloudLink || !error) return !error && Boolean(data);
+                } catch (error) { return false; }
+            }
+            if (cloudLink) return false;
+            try {
+                const links = JSON.parse(localStorage.getItem('supervisor_links') || '[]');
+                return links.some(link => String(link.token || link.id) === token && link.active !== false);
+            } catch (error) { return false; }
+        }
+
+        window.onload = async function() {
+            const params = new URLSearchParams(window.location.search);
+            cloudRequired = params.get('cloud') === '1';
+            initializeCloudSync();
+            branding = await SharedBranding.load(supabaseClient, branding);
+            applySharedBranding();
+            if (cloudRequired && !supabaseClient) {
+                alert('Supabase is not connected. Configure the cloud connection in the Supervisor Portal before starting this briefing.');
+                window.location.replace('supervisor.html' + (window.location.search || ''));
+                return;
+            }
+            if (!(await validateSupervisorLink(params))) {
+                alert('This supervisor link is invalid or has been revoked.');
+                window.location.replace('supervisor.html' + (window.location.search || ''));
+                return;
+            }
+            const supervisorName = (params.get('name') || '').trim();
+            const projectName = (params.get('project') || '').trim();
+            document.getElementById('supervisor-portal-link').href = 'supervisor.html' + (window.location.search || '');
+            await loadToolDB();
+            loadSetup();
+            if (supervisorName && projectName) {
+                state.setup.name = supervisorName;
+                state.setup.project = projectName;
+            }
+            if (state.setup.project) {
+                updateHeader();
+                setTimeout(function() { askOperativeName(); }, 500);
+            } else {
+                document.getElementById('setup-modal').style.display = 'flex';
+            }
+        };
+
+        async function loadToolDB() {
+            const databaseFiles = [
+                'data-drills-hammers.json',
+                'data-saws.json',
+                'data-grinders-cutters.json',
+                'data-demolition-pneumatic.json',
+                'data-mixers.json',
+                'data-cordless-drills.json'
+            ];
+
+            TOOL_DB = [];
+            const results = await Promise.all(databaseFiles.map(async function(file) {
+                try {
+                    const fileUrl = new URL(file, window.location.href);
+                    const response = await fetch(fileUrl.toString());
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    const data = await response.json();
+                    if (!data || !Array.isArray(data.categories)) {
+                        throw new Error('Invalid tool database format');
+                    }
+                    return { file: file, data: data };
+                } catch (e) {
+                    console.warn('Could not load ' + file + ': ' + e.message);
+                    return null;
+                }
+            }));
+
+            results.forEach(function(result) {
+                if (!result) return;
+                result.data.categories.forEach(function(cat) {
+                    if (!cat || !Array.isArray(cat.tools)) return;
+                    cat.tools.forEach(function(tool) {
+                        if (!tool || typeof tool !== 'object') return;
+                        const vibration = Number(tool.vibration);
+                        if (!Number.isFinite(vibration) || vibration <= 0) return;
+                        TOOL_DB.push({
+                            category: cat.category || 'Uncategorized',
+                            brand: tool.brand || '',
+                            model: tool.model || '',
+                            vibration: vibration,
+                            note: tool.note || ''
+                        });
+                    });
+                });
+            });
+            console.log('Loaded ' + TOOL_DB.length + ' tools from database.');
+        }
+
+        function loadSetup() {
+            try { const saved = localStorage.getItem('havs_setup'); if (saved) state.setup = JSON.parse(saved); } catch (e) {}
+        }
+        function saveSetup() {
+            try { localStorage.setItem('havs_setup', JSON.stringify(state.setup)); } catch (e) {}
+            updateHeader();
+        }
+        function updateHeader() {
+            document.getElementById('header-project').innerText = state.setup.project || 'HAVS Briefing';
+            document.getElementById('header-manager').innerText = state.setup.name ? state.setup.name + (state.setup.role ? ' (' + state.setup.role + ')' : '') : 'Setup Required';
+        }
+
+        function getTime() {
+            var now = new Date();
+            return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+        }
+
+        function addAppBubble(text) {
+            var div = document.createElement('div');
+            div.className = 'bubble app';
+            div.appendChild(document.createTextNode(text));
+            var ts = document.createElement('span'); ts.className = 'time'; ts.innerText = getTime();
+            div.appendChild(ts);
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addUserBubble(text) {
+            var div = document.createElement('div');
+            div.className = 'bubble user';
+            div.appendChild(document.createTextNode(text));
+            var ts = document.createElement('span'); ts.className = 'time'; ts.innerText = getTime();
+            div.appendChild(ts);
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addHTMLBubble(html) {
+            var div = document.createElement('div');
+            div.className = 'bubble app';
+            div.innerHTML = html + '<span class="time">' + getTime() + '</span>';
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addLimitCard(tool, timeHours) {
+            var eavHours = 8 * Math.pow(2.5 / tool.vibration, 2);
+            var eavH = Math.floor(eavHours);
+            var eavM = Math.floor((eavHours - eavH) * 60);
+            var elvHours = 8 * Math.pow(5.0 / tool.vibration, 2);
+            var elvH = Math.floor(elvHours);
+            var elvM = Math.floor((elvHours - elvH) * 60);
+            var statusClass = 'safe', statusText = 'SAFE';
+            if (timeHours > elvHours) { statusClass = 'danger'; statusText = 'ILLEGAL - EXCEEDS LIMIT'; }
+            else if (timeHours > eavHours) { statusClass = 'warn'; statusText = 'OVER ACTION VALUE'; }
+            var html = '<div class="limit-card ' + statusClass + '">';
+            html += '<div class="limit-title">' + tool.brand + ' ' + tool.model + ' <span style="float:right;">' + statusText + '</span></div>';
+            html += '<div class="limit-row"><span>Vibration:</span><span>' + tool.vibration + ' m/s&sup2;</span></div>';
+            html += '<div class="limit-row"><span>Requested Time:</span><span>' + timeHours + ' hrs</span></div>';
+            html += '<div class="limit-row" style="color:#FF9800;"><span>&#9888;&#65039; Time to Action Value (2.5):</span><span>' + eavH + 'h ' + eavM + 'm</span></div>';
+            html += '<div class="limit-row" style="color:#FF5252; font-weight:bold;"><span>&#128721; Time to Limit Value (5.0):</span><span>' + elvH + 'h ' + elvM + 'm</span></div>';
+            html += '</div>';
+            addHTMLBubble(html);
+        }
+
+        function addActionButtons(btn1Text, btn2Text, action1, action2) {
+            var div = document.createElement('div');
+            div.className = 'bubble app';
+            div.style.background = 'transparent'; div.style.boxShadow = 'none'; div.style.padding = '0';
+            div.style.display = 'flex'; div.style.gap = '10px';
+            var b1 = document.createElement('button'); b1.className = 'action-btn'; b1.innerText = btn1Text;
+            b1.onclick = function() { action1(); };
+            var b2 = document.createElement('button'); b2.className = 'action-btn'; b2.innerText = btn2Text;
+            b2.onclick = function() { action2(); };
+            div.appendChild(b1); div.appendChild(b2);
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function askOperativeName() {
+            state.step = 'ASK_NAME';
+            addAppBubble('What is the operative\'s name? Type it below and tap send.');
+            textInput.value = '';
+            textInput.focus();
+        }
+
+        function askOperativeEmployer() {
+            state.step = 'ASK_EMPLOYER';
+            addAppBubble('Who is the employer or agency?');
+            textInput.value = '';
+            textInput.focus();
+        }
+
+        function askOperativeArea() {
+            state.step = 'ASK_AREA';
+            addAppBubble('What area or zone are they working in?');
+            textInput.value = '';
+            textInput.focus();
+        }
+
+        function askToolSelection() {
+            state.step = 'ASK_TOOL';
+            addAppBubble('Which tool? Search the database below or add manually.');
+            showToolSearch();
+        }
+
+        function handleInput(text) {
+            var value = text.trim();
+            if (!value) return;
+
+            addUserBubble(value);
+            textInput.value = '';
+
+            if (state.step === 'ASK_NAME') {
+                state.currentOperative.name = value;
+                askOperativeEmployer();
+            } else if (state.step === 'ASK_EMPLOYER') {
+                state.currentOperative.employer = value;
+                askOperativeArea();
+            } else if (state.step === 'ASK_AREA') {
+                state.currentOperative.area = value;
+                addAppBubble('Logged: ' + state.currentOperative.name + ' from ' + state.currentOperative.employer + ' in ' + state.currentOperative.area + '.');
+                askToolSelection();
+            } else if (state.step === 'END') {
+                var lower = value.toLowerCase();
+                if (lower.includes('report') || lower.includes('generate') || lower.includes('finish') || lower.includes('done')) {
+                    openSignature();
+                } else if (lower.includes('add') || lower.includes('new') || lower.includes('another') || lower.includes('tool')) {
+                    askToolSelection();
+                } else {
+                    addAppBubble('Please type "add another tool" or "generate report".');
+                }
+            }
+        }
+
+        sendBtn.addEventListener('click', function() {
+            if (textInput.value.trim()) handleInput(textInput.value.trim());
+        });
+        textInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && textInput.value.trim()) handleInput(textInput.value.trim());
+        });
+
+        function showToolSearch() {
+            searchCounter++;
+            var uniqueId = searchCounter;
+
+            var html = '<div class="search-container" id="search-container-' + uniqueId + '">';
+            html += '<label class="form-label" style="margin-top:0;">Search Tool Database</label>';
+            html += '<input type="text" id="tool-search-input-' + uniqueId + '" class="search-input">';
+            html += '<div id="tool-search-results-' + uniqueId + '" class="search-results"></div>';
+            html += '<button id="btn-manual-entry-' + uniqueId + '" class="action-btn" style="margin-top:10px; width:100%; background:#FF9800;">Tool not listed? Add Manually</button>';
+            html += '</div>';
+            addHTMLBubble(html);
+
+            var searchInput = document.getElementById('tool-search-input-' + uniqueId);
+            var resultsDiv = document.getElementById('tool-search-results-' + uniqueId);
+            var manualBtn = document.getElementById('btn-manual-entry-' + uniqueId);
+
+            searchInput.addEventListener('input', function(e) {
+                var query = e.target.value.toLowerCase().trim();
+                resultsDiv.innerHTML = '';
+                if (query.length < 2) return;
+
+                var matches = TOOL_DB.filter(function(t) {
+                    return (t.brand + ' ' + t.model).toLowerCase().includes(query);
+                });
+
+                if (matches.length === 0) {
+                    resultsDiv.innerHTML = '<p style="color:#666; font-size:0.8rem; text-align:center; padding:10px;">No matches found.</p>';
+                } else {
+                    matches.forEach(function(tool) {
+                        var btn = document.createElement('button');
+                        btn.className = 'search-result-btn';
+                        btn.innerHTML = '<strong>' + tool.brand + ' ' + tool.model + '</strong><br><span style="font-size:0.8rem; color:#666;">' + tool.vibration + ' m/s&sup2; - ' + tool.category + '</span>';
+                        btn.onclick = function() {
+                            resultsDiv.innerHTML = '';
+                            handleToolSelected(tool);
+                        };
+                        resultsDiv.appendChild(btn);
+                    });
+                }
+            });
+
+            manualBtn.onclick = function() { showManualEntryForm(); };
+        }
+
+        function showManualEntryForm() {
+            var html = '<div class="manual-entry-form">';
+            html += '<p style="margin:0 0 10px 0; font-size:0.9rem; font-weight:bold;">Enter Tool Details Manually</p>';
+            html += '<label class="form-label" style="margin-top:0;">Brand</label>';
+            html += '<input type="text" id="manual-brand">';
+            html += '<label class="form-label">Model</label>';
+            html += '<div class="input-row">';
+            html += '<input type="text" id="manual-model">';
+            html += '<button class="search-btn" onclick="openGoogleSearch()"> Search</button>';
+            html += '</div>';
+            html += '<label class="form-label">Vibration (m/s&sup2;)</label>';
+            html += '<input type="number" id="manual-vib" step="0.1">';
+            html += '<button id="manual-submit-btn" style="width:100%; margin-top:10px;">Add Tool</button>';
+            html += '</div>';
+            addHTMLBubble(html);
+
+            document.getElementById('manual-submit-btn').onclick = function() {
+                var brand = document.getElementById('manual-brand').value.trim();
+                var model = document.getElementById('manual-model').value.trim();
+                var vib = parseFloat(document.getElementById('manual-vib').value);
+                if (!brand || !model || isNaN(vib) || vib <= 0) { alert('Please fill in all fields.'); return; }
+                handleToolSelected({ category: 'Manual', brand: brand, model: model, vibration: vib, note: '' });
+            };
+        }
+
+        function openGoogleSearch() {
+            var brand = document.getElementById('manual-brand').value.trim();
+            var model = document.getElementById('manual-model').value.trim();
+            var query = brand + ' ' + model + ' vibration value m/s2 HAVS';
+            window.open('https://www.google.com/search?q=' + encodeURIComponent(query), '_blank');
+        }
+
+        function showTimeInputUI() {
+            timeCounter++;
+            var uniqueTimeId = timeCounter;
+            var tool = state.currentToolSelection;
+
+            var html = '<div style="text-align:center;" id="time-ui-container-' + uniqueTimeId + '">';
+            html += '<p style="margin:5px 0; font-size:0.9rem;">How long for <strong>' + tool.brand + ' ' + tool.model + '</strong>?</p>';
+            html += '<div class="time-input-row">';
+            html += '<input type="number" id="time-value-' + uniqueTimeId + '" min="0" max="24" step="0.25">';
+            html += '<select id="time-unit-' + uniqueTimeId + '"><option value="hours">Hours</option><option value="minutes">Minutes</option></select>';
+            html += '<button id="time-confirm-btn-' + uniqueTimeId + '">Confirm</button>';
+            html += '</div>';
+            html += '<div class="time-presets">';
+            html += '<button onclick="setPresetTime(0.5, ' + uniqueTimeId + ')">30 min</button>';
+            html += '<button onclick="setPresetTime(1, ' + uniqueTimeId + ')">1 hour</button>';
+            html += '<button onclick="setPresetTime(1.5, ' + uniqueTimeId + ')">1.5 hrs</button>';
+            html += '<button onclick="setPresetTime(2, ' + uniqueTimeId + ')">2 hours</button>';
+            html += '<button onclick="setPresetTime(4, ' + uniqueTimeId + ')">4 hours</button>';
+            html += '<button onclick="setPresetTime(8, ' + uniqueTimeId + ')">Full shift</button>';
+            html += '</div></div>';
+            addHTMLBubble(html);
+
+            document.getElementById('time-confirm-btn-' + uniqueTimeId).onclick = function() {
+                var val = parseFloat(document.getElementById('time-value-' + uniqueTimeId).value);
+                var unit = document.getElementById('time-unit-' + uniqueTimeId).value;
+                if (isNaN(val) || val <= 0) { alert('Enter valid time.'); return; }
+                var hours = unit === 'minutes' ? val / 60 : val;
+                handleTimeConfirmed(hours);
+            };
+        }
+
+        function setPresetTime(hours, uniqueId) {
+            var input = document.getElementById('time-value-' + uniqueId);
+            var unitSelect = document.getElementById('time-unit-' + uniqueId);
+            if (hours < 1) { input.value = hours * 60; unitSelect.value = 'minutes'; }
+            else { input.value = hours; unitSelect.value = 'hours'; }
+            document.getElementById('time-confirm-btn-' + uniqueId).click();
+        }
+
+        function handleToolSelected(tool) {
+            state.currentToolSelection = tool;
+            addAppBubble('Found: ' + tool.brand + ' ' + tool.model + ' (' + tool.vibration + ' m/s\u00B2). Please take a photo.');
+            state.step = 'TOOL_PHOTO';
+            openCamera();
+        }
+
+        function handleTimeConfirmed(hours) {
+            var tool = state.currentToolSelection;
+            var photo = state.currentPhoto;
+
+            addLimitCard(tool, hours);
+
+            var eavHours = 8 * Math.pow(2.5 / tool.vibration, 2);
+            var elvHours = 8 * Math.pow(5.0 / tool.vibration, 2);
+
+            var status = 'safe';
+            var limitHours = eavHours;
+            var limitName = 'Action Value (2.5)';
+
+            if (hours > elvHours) {
+                status = 'danger';
+                limitHours = elvHours;
+                limitName = 'Exposure Limit (5.0)';
+            } else if (hours > eavHours) {
+                status = 'warn';
+                limitHours = eavHours;
+                limitName = 'Action Value (2.5)';
+            }
+
+            var limitH = Math.floor(limitHours);
+            var limitM = Math.floor((limitHours - limitH) * 60);
+            var limitString = limitH + 'h ' + limitM + 'm';
+
+            if (status === 'safe') {
+                addAppBubble('✅ Time is within safe limits.');
+                addActionButtons('Confirm & Log', 'Change Time',
+                    function() { finalizeLog(tool, photo, hours); },
+                    function() { showTimeInputUI(); }
+                );
+            } else {
+                var msg = '⚠️ WARNING: ' + hours + ' hrs exceeds the ' + limitName + ' (' + limitString + ').';
+                if (status === 'danger') msg += ' This is ILLEGAL.';
+                addAppBubble(msg);
+
+                addActionButtons('Reduce to ' + limitString, 'Change Time',
+                    function() {
+                        addLimitCard(tool, limitHours);
+                        finalizeLog(tool, photo, limitHours);
+                    },
+                    function() { showTimeInputUI(); }
+                );
+            }
+        }
+
+        function finalizeLog(tool, photo, hours) {
+            state.currentOperative.tools.push({
+                category: tool.category, brand: tool.brand, model: tool.model,
+                vibration: tool.vibration, note: tool.note, photo: photo, requestedHours: hours
+            });
+            addAppBubble('Tool logged. Type "add another tool" or "generate report".');
+            state.step = 'END';
+            textInput.value = '';
+            textInput.focus();
+        }
+
+        var camModal = document.getElementById('camera-modal');
+        var video = document.getElementById('camera-video');
+        var canvas = document.getElementById('camera-canvas');
+
+        function openCamera() {
+            camModal.style.display = 'flex';
+            try {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream) {
+                    state.stream = stream; video.srcObject = stream;
+                }).catch(function(e) {
+                    alert('Camera unavailable.');
+                    camModal.style.display = 'none';
+                    state.currentPhoto = null;
+                    askForTime();
+                });
+            } catch (e) { camModal.style.display = 'none'; state.currentPhoto = null; askForTime(); }
+        }
+
+        document.getElementById('cam-capture').onclick = function() {
+            const sourceWidth = video.videoWidth || 640;
+            const sourceHeight = video.videoHeight || 480;
+            const scale = Math.min(1, 1280 / Math.max(sourceWidth, sourceHeight));
+            canvas.width = Math.round(sourceWidth * scale);
+            canvas.height = Math.round(sourceHeight * scale);
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            state.currentPhoto = canvas.toDataURL('image/jpeg', 0.72);
+            stopCamera(); askForTime();
+        };
+        document.getElementById('cam-cancel').onclick = function() { stopCamera(); state.currentPhoto = null; askForTime(); };
+        function stopCamera() {
+            if (state.stream) { state.stream.getTracks().forEach(function(t){ t.stop(); }); state.stream = null; }
+            camModal.style.display = 'none';
+        }
+        function askForTime() {
+            state.step = 'TOOL_TIME';
+            addAppBubble('How long will they use this tool?');
+            showTimeInputUI();
+        }
+
+        var sigModal = document.getElementById('sig-modal');
+        var sigCanvas = document.getElementById('sig-canvas');
+        var sigPad = null;
+
+        function openSignature() {
+            sigModal.style.display = 'flex';
+            if (!sigPad) sigPad = new SignaturePad(sigCanvas, { backgroundColor: 'rgb(249,249,249)' });
+            else sigPad.clear();
+        }
+        document.getElementById('sig-clear').onclick = function() { sigPad.clear(); };
+        document.getElementById('sig-save').onclick = async function() {
+            if (sigPad.isEmpty()) { alert('Please sign first.'); return; }
+            sigModal.style.display = 'none';
+            try {
+                await generatePDF(sigPad.toDataURL());
+            } catch (error) {
+                alert('The report was downloaded, but could not be saved to Supabase: ' + error.message);
+            }
+        };
+
+        async function generatePDF(sigData) {
+            var jsPDF = window.jspdf.jsPDF;
+            var doc = new jsPDF('p', 'mm', 'a4');
+            var pageWidth = doc.internal.pageSize.getWidth();
+            var pageHeight = doc.internal.pageSize.getHeight();
+            var margin = 15;
+
+            doc.setFillColor(branding.color || '#075E54');
+            doc.rect(0, 0, pageWidth, 35, 'F');
+
+            var logoOffset = 0;
+            if (reportLogo()) {
+                try {
+                    var logoImage = reportLogo();
+                    var logoFmt = (logoImage.indexOf('data:image/png') === 0) ? 'PNG' : 'JPEG';
+                    var imgProps = doc.getImageProperties(logoImage);
+                    var maxLogoHeight = 22; var maxLogoWidth = 50;
+                    var ratio = imgProps.width / imgProps.height;
+                    var finalH = maxLogoHeight; var finalW = finalH * ratio;
+                    if (finalW > maxLogoWidth) { finalW = maxLogoWidth; finalH = finalW / ratio; }
+                    doc.addImage(logoImage, logoFmt, margin, (35 - finalH) / 2, finalW, finalH);
+                    logoOffset = finalW + 10;
+                } catch (e) {}
+            }
+
+            doc.setTextColor(branding.textColor || '#ffffff');
+            doc.setFontSize(18); doc.setFont('helvetica', 'bold');
+            doc.text((branding.title || 'Company') + ' | HAVS DAILY BRIEFING', margin + logoOffset, 14);
+            doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+            doc.text((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), margin + logoOffset, 22);
+            doc.text(state.setup.name + ' (' + state.setup.role + ')', pageWidth - margin, 14, { align: 'right' });
+            doc.text(new Date().toLocaleDateString('en-GB'), pageWidth - margin, 22, { align: 'right' });
+
+            var y = 45;
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+            doc.text('Operative Details', margin, y); y += 8;
+            doc.setDrawColor(200, 200, 200); doc.line(margin, y, pageWidth - margin, y); y += 8;
+
+            doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+            doc.text('Operative Name:', margin, y); doc.setFont('helvetica', 'bold'); doc.text(state.currentOperative.name || 'N/A', margin + 40, y);
+            doc.setFont('helvetica', 'normal'); doc.text('Employer:', margin + 110, y); doc.setFont('helvetica', 'bold'); doc.text(state.currentOperative.employer || 'N/A', margin + 135, y);
+            y += 7;
+            doc.setFont('helvetica', 'normal'); doc.text('Work Area:', margin, y); doc.setFont('helvetica', 'bold'); doc.text(state.currentOperative.area || 'N/A', margin + 40, y);
+            doc.setFont('helvetica', 'normal'); doc.text('Date:', margin + 110, y); doc.setFont('helvetica', 'bold'); doc.text(new Date().toLocaleDateString('en-GB'), margin + 135, y);
+            y += 12;
+
+            doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+            doc.text('Safe Usage Limits', margin, y); y += 8;
+            var tableWidth = pageWidth - 2 * margin;
+            doc.setFillColor(240, 240, 240); doc.rect(margin, y - 5, tableWidth, 8, 'F');
+            doc.setDrawColor(150, 150, 150); doc.rect(margin, y - 5, tableWidth, 8);
+            doc.setFontSize(7); doc.setFont('helvetica', 'bold');
+            doc.text('Status', margin + 2, y); doc.text('Tool Name & Type', margin + 35, y);
+            doc.text('Vib (m/s2)', margin + 105, y); doc.text('Time to EAV', margin + 125, y);
+            doc.text('Time to ELV', margin + 145, y); doc.text('Requested', margin + 165, y);
+            y += 5;
+
+            state.currentOperative.tools.forEach(function(t) {
+                var eavHours = 8 * Math.pow(2.5 / t.vibration, 2);
+                var eavH = Math.floor(eavHours); var eavM = Math.floor((eavHours - eavH) * 60);
+                var elvHours = 8 * Math.pow(5.0 / t.vibration, 2);
+                var elvH = Math.floor(elvHours); var elvM = Math.floor((elvHours - elvH) * 60);
+                var status = t.requestedHours > elvHours ? 'ILLEGAL' : (t.requestedHours > eavHours ? 'OVER EAV' : 'SAFE');
+
+                doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+                if (status === 'ILLEGAL') doc.setTextColor(220, 38, 38);
+                else if (status === 'OVER EAV') doc.setTextColor(255, 152, 0);
+                else doc.setTextColor(34, 197, 94);
+                doc.text(status, margin + 2, y + 4);
+                doc.setTextColor(0, 0, 0);
+                doc.text(t.brand + ' ' + t.model, margin + 35, y + 4);
+                doc.text(t.vibration.toString(), margin + 105, y + 4);
+                doc.text(eavH + 'h ' + eavM + 'm', margin + 125, y + 4);
+                doc.text(elvH + 'h ' + elvM + 'm', margin + 145, y + 4);
+
+                // FIX: Format requested time cleanly
+                var totalMins = Math.round(t.requestedHours * 60);
+                var reqH = Math.floor(totalMins / 60);
+                var reqM = totalMins % 60;
+                doc.text(reqH + 'h ' + reqM + 'm', margin + 165, y + 4);
+
+                y += 7;
+            });
+            y += 5;
+
+            if (y > pageHeight - 60) { doc.addPage(); y = 20; }
+            doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 0, 0);
+            doc.text('Tool Evidence', margin, y); y += 8;
+
+            state.currentOperative.tools.forEach(function(t) {
+                if (y > pageHeight - 40) { doc.addPage(); y = 20; }
+                doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+                doc.text(t.brand + ' ' + t.model, margin, y + 4);
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+                doc.text(t.category, margin, y + 9);
+                if (t.photo) { try { doc.addImage(t.photo, 'JPEG', margin + 72, y - 2, 35, 35); } catch (e) {} }
+                else { doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150); doc.text('No photo', margin + 72, y + 15); doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'normal'); }
+                y += 38;
+            });
+
+            if (y > pageHeight - 50) { doc.addPage(); y = 20; }
+            y += 5;
+            doc.setDrawColor(0, 0, 0); doc.line(margin, y, margin + 70, y);
+            doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+            doc.text('Manager Signature', margin, y + 5);
+            if (sigData) { try { doc.addImage(sigData, 'PNG', margin, y + 8, 50, 25); } catch (e) {} }
+            y += 38;
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+            doc.text(state.setup.name + ' - ' + state.setup.role, margin, y);
+            doc.text('Signed: ' + new Date().toLocaleString('en-GB'), margin + 80, y);
+
+            var totalPages = doc.internal.getNumberOfPages();
+            for (var i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(150, 150, 150);
+                doc.text(branding.footerText || ((branding.title || 'HAVS Daily Briefing') + ' - ' + state.setup.company + ' - ' + state.setup.project), pageWidth / 2, pageHeight - 8, { align: 'center' });
+                doc.text('Page ' + i + ' of ' + totalPages, pageWidth - margin, pageHeight - 8, { align: 'right' });
+            }
+
+            var safeOperativeName = String(state.currentOperative.name || 'Operative')
+                .trim()
+                .replace(/[^A-Za-z0-9_-]+/g, '_')
+                .replace(/^_+|_+$/g, '') || 'Operative';
+            var fileName = 'HAVS_' + safeOperativeName + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
+            var pdfBlob = doc.output('blob');
+            var projectIds = getAuditProjectIds(state.setup.project || '');
+            var auditId = 'havs_' + Date.now();
+            var safeTools = 0;
+            var hasActionLevel = false;
+            var hasLimitLevel = false;
+            var toolQuestions = state.currentOperative.tools.map(function(tool, index) {
+                var eavHours = 8 * Math.pow(2.5 / tool.vibration, 2);
+                var elvHours = 8 * Math.pow(5.0 / tool.vibration, 2);
+                var answer = tool.requestedHours > elvHours ? 'No' : (tool.requestedHours > eavHours ? 'Review' : 'Yes');
+                if (answer === 'Yes') safeTools++;
+                if (answer === 'Review') hasActionLevel = true;
+                if (answer === 'No') hasLimitLevel = true;
+                return {
+                    id: auditId + '_tool_' + (index + 1),
+                    topic: (tool.brand || '') + ' ' + (tool.model || ''),
+                    baseTopic: tool.category || 'HAVS tool exposure',
+                    text: tool.vibration + ' m/s2; requested exposure ' + tool.requestedHours + ' hours',
+                    answer: answer,
+                    severity: answer === 'No' ? 'Red' : (answer === 'Review' ? 'Amber' : ''),
+                    type: 'Field Verification',
+                    complianceType: 'havs',
+                    projectName: state.setup.project || '',
+                    operativeName: state.currentOperative.name || '',
+                    managerName: state.setup.name || '',
+                    employer: state.currentOperative.employer || '',
+                    area: state.currentOperative.area || '',
+                    brand: tool.brand || '',
+                    model: tool.model || '',
+                    vibration: tool.vibration,
+                    requestedHours: tool.requestedHours
+                };
+            });
+            var audit = {
+                id: auditId,
+                clientId: projectIds.clientId,
+                siteId: projectIds.siteId,
+                date: new Date().toISOString().slice(0, 10),
+                inspectorName: state.setup.name || '',
+                inspectorQuals: (state.setup.role || 'Manager') + ' - HAVS',
+                inspectorNotes: 'Operative: ' + (state.currentOperative.name || 'N/A') + ' | Employer: ' + (state.currentOperative.employer || 'N/A') + ' | Area: ' + (state.currentOperative.area || 'N/A') + ' | Project: ' + (state.setup.project || 'N/A'),
+                auditorSignature: sigData,
+                siteRepName: '',
+                siteRepSignature: '',
+                score: state.currentOperative.tools.length ? Math.round((safeTools / state.currentOperative.tools.length) * 100) : 0,
+                status: hasLimitLevel ? 'Stop Work' : (hasActionLevel ? 'Action Required' : 'Satisfactory'),
+                questions: toolQuestions,
+                pdfUrl: ''
+            };
+            doc.save(fileName);
+            await syncHavsAudit(audit, pdfBlob, fileName);
+            addAppBubble('Report generated. Have a safe shift!');
+            state.currentOperative = { name: '', employer: '', area: '', tools: [] };
+        }
+
+        document.getElementById('setup-save').onclick = function() {
+            state.setup.company = document.getElementById('setup-company').value.trim();
+            state.setup.project = document.getElementById('setup-project').value.trim();
+            state.setup.number = document.getElementById('setup-number').value.trim();
+            state.setup.name = document.getElementById('setup-name').value.trim();
+            state.setup.role = document.getElementById('setup-role').value.trim();
+            if (!state.setup.company || !state.setup.project || !state.setup.name) { alert('Required fields missing.'); return; }
+            var logoFile = document.getElementById('setup-logo').files[0];
+            if (logoFile) {
+                var reader = new FileReader();
+                reader.onload = function(e) { state.setup.logo = e.target.result; saveSetup(); document.getElementById('setup-modal').style.display = 'none'; setTimeout(askOperativeName, 300); };
+                reader.readAsDataURL(logoFile);
+            } else { saveSetup(); document.getElementById('setup-modal').style.display = 'none'; setTimeout(askOperativeName, 300); }
+        };
+    </script>
+</body>
+</html>

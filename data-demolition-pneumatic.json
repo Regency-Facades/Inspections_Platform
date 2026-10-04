@@ -1,0 +1,78 @@
+{
+  "categories": [
+    {
+      "category": "Nail Guns & Staplers (Cordless & Pneumatic)",
+      "tools": [
+        { "brand": "Paslode", "model": "IM350+ (First Fix)", "vibration": 2.5, "note": "Gas nailer." },
+        { "brand": "Paslode", "model": "IM200 (Second Fix)", "vibration": 2.0, "note": "Finish nailer." },
+        { "brand": "Paslode", "model": "PP35i (Pallet Nailer)", "vibration": 3.5, "note": "Heavy duty pallet." },
+        { "brand": "DeWalt", "model": "DCN692 (18V Framing)", "vibration": 3.0, "note": "Brushless cordless framing." },
+        { "brand": "DeWalt", "model": "DCN680 (18V First Fix)", "vibration": 2.5, "note": "Brushless cordless." },
+        { "brand": "DeWalt", "model": "DCN650 (18V Second Fix)", "vibration": 2.0, "note": "Brad nailer." },
+        { "brand": "Makita", "model": "DPT353 (18V Pin Nailer)", "vibration": 1.5, "note": "Cordless pin." },
+        { "brand": "Makita", "model": "DRT50 (18V Router)", "vibration": 2.5, "note": "Cordless trimmer." },
+        { "brand": "Milwaukee", "model": "M18 FUEL Framing (2645)", "vibration": 3.0, "note": "Fuel cordless framing." },
+        { "brand": "Bostitch", "model": "N66C-1 (Pneumatic)", "vibration": 3.5, "note": "Coil roofing nailer." },
+        { "brand": "Bostitch", "model": "N80CB-1 (Pneumatic)", "vibration": 3.0, "note": "Framing nailer." },
+        { "brand": "Hitachi / Metabo HPT", "model": "NR90AES1 (Pneumatic)", "vibration": 3.5, "note": "Framing nailer." }
+      ]
+    },
+    {
+      "category": "Riveters (Cordless & Pneumatic)",
+      "tools": [
+        { "brand": "Milwaukee", "model": "M12 Riveter (2550)", "vibration": 4.5, "note": "12V cordless riveter." },
+        { "brand": "Milwaukee", "model": "M18 Riveter (2552)", "vibration": 5.0, "note": "18V cordless riveter." },
+        { "brand": "DeWalt", "model": "DCR020 (18V Riveter)", "vibration": 4.5, "note": "Cordless riveter." },
+        { "brand": "Makita", "model": "DBR230 (18V Riveter)", "vibration": 4.0, "note": "Cordless riveter." },
+        { "brand": "Gedore", "model": "AVS 6 (Pneumatic)", "vibration": 6.5, "note": "Air riveter." },
+        { "brand": "Triton", "model": "TNR350 (Pneumatic)", "vibration": 7.0, "note": "Heavy duty air riveter." }
+      ]
+    },
+    {
+      "category": "Needle Scalers & Pneumatic Chisels",
+      "tools": [
+        { "brand": "Chicago Pneumatic", "model": "CP7200 (Needle Scaler)", "vibration": 18.0, "note": "EXTREME VIBRATION. Limit use strictly." },
+        { "brand": "Chicago Pneumatic", "model": "CP9121 (Air Hammer)", "vibration": 12.0, "note": "Pneumatic chisel." },
+        { "brand": "Ingersoll Rand", "model": "QX350 (Needle Gun)", "vibration": 16.5, "note": "Rust removal/scabbling." },
+        { "brand": "Ingersoll Rand", "model": "7802RA (Air Hammer)", "vibration": 11.0, "note": "Pneumatic hammer." },
+        { "brand": "Atlas Copco", "model": "BTV 3400 (Scabbler)", "vibration": 15.0, "note": "Concrete scabbling." },
+        { "brand": "Cleco", "model": "48RS4RQ4 (Pneumatic)", "vibration": 10.0, "note": "Air scaler." },
+        { "brand": "Desoutter", "model": "D53-25 (Pneumatic)", "vibration": 9.5, "note": "Air chisel." }
+      ]
+    },
+    {
+      "category": "Rammers, Tampers & Plate Compactors",
+      "tools": [
+        { "brand": "Wacker Neuson", "model": "BS 60-4 (Rammer)", "vibration": 8.0, "note": "Petrol soil rammer." },
+        { "brand": "Wacker Neuson", "model": "BS 70-4 (Rammer)", "vibration": 8.5, "note": "Heavy petrol rammer." },
+        { "brand": "Wacker Neuson", "model": "AP1550 (Plate Compactor)", "vibration": 5.0, "note": "Forward plate." },
+        { "brand": "Wacker Neuson", "model": "DPU6555 (Reversible Plate)", "vibration": 6.5, "note": "Heavy reversible plate." },
+        { "brand": "Bomag", "model": "BT 65 (Rammer)", "vibration": 7.5, "note": "Petrol tamping rammer." },
+        { "brand": "Bomag", "model": "BPR 35/50 (Plate)", "vibration": 5.5, "note": "Forward plate compactor." },
+        { "brand": "Honda", "model": "CRF70 (Rammer)", "vibration": 7.0, "note": "Petrol rammer." },
+        { "brand": "Mikasa", "model": "MT-72FW (Rammer)", "vibration": 8.0, "note": "Petrol jumping jack." }
+      ]
+    },
+    {
+      "category": "Concrete Mixers & Mortar Mixers",
+      "tools": [
+        { "brand": "Wacker Neuson", "model": "MIX 100 P (Petrol Mixer)", "vibration": 3.5, "note": "Petrol concrete mixer." },
+        { "brand": "Wacker Neuson", "model": "MIX 140 E (Electric Mixer)", "vibration": 2.5, "note": "Electric concrete mixer." },
+        { "brand": "Belle", "model": "Premier 150 (Petrol)", "vibration": 3.5, "note": "Standard site mixer." },
+        { "brand": "Belle", "model": "Minimix 150 (Electric)", "vibration": 2.5, "note": "Electric site mixer." },
+        { "brand": "Makita", "model": "UT2204 (Mortar Mixer)", "vibration": 4.5, "note": "Handheld paddle mixer." },
+        { "brand": "DeWalt", "model": "DWD115K (Paddle Mixer)", "vibration": 4.0, "note": "110V paddle mixer." }
+      ]
+    },
+    {
+      "category": "Generators & Compressors (Portable)",
+      "tools": [
+        { "brand": "Honda", "model": "EU22i (Inverter Generator)", "vibration": 2.0, "note": "Portable generator." },
+        { "brand": "Honda", "model": "EX6500 (Large Generator)", "vibration": 3.5, "note": "Large site generator." },
+        { "brand": "Makita", "model": "DGP180 (18V Inflator)", "vibration": 2.5, "note": "Cordless inflator." },
+        { "brand": "DeWalt", "model": "DXCM201 (Compressor)", "vibration": 3.0, "note": "20L site compressor." },
+        { "brand": "Bostitch", "model": "BTFP3KIT (Compressor)", "vibration": 2.5, "note": "Portable compressor." }
+      ]
+    }
+  ]
+}

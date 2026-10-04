@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#075E54">
+  <title>Supervisor Portal | Site Compliance</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="branding.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --wa-green: #075E54; --paper: #ECE5DD; }
+    body { font-family: 'DM Sans', sans-serif; background-color: var(--paper); }
+    .display-font { font-family: 'Oswald', sans-serif; }
+    .paper-texture {
+      background-image: radial-gradient(rgba(7, 94, 84, .055) .7px, transparent .7px);
+      background-size: 12px 12px;
+    }
+    .launch-link { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+    .launch-link:hover { transform: translateY(-2px); box-shadow: 0 12px 22px rgba(34, 53, 46, .12); border-color: rgba(7, 94, 84, .35); }
+    .launch-link:focus-visible { outline: 3px solid #c9df65; outline-offset: 3px; }
+    .portal-brand-logo { display: none; max-width: 54px; height: 32px; object-fit: contain; border-radius: 3px; background: white; padding: 2px; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body class="paper-texture min-h-screen text-slate-800 antialiased">
+  <header class="bg-[#075E54] text-white shadow-md">
+    <div class="mx-auto flex min-h-[76px] max-w-3xl items-center gap-3 px-5 py-4 sm:px-7">
+      <div id="portalBrandMark" class="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-white/20 bg-white/10 text-[#d8e998]" aria-hidden="true">
+        <i data-lucide="hard-hat" class="h-6 w-6"></i>
+      </div>
+      <div class="min-w-0">
+        <p id="sharedBrandTitle" class="truncate text-xs font-semibold text-white/80"></p>
+        <p id="sharedBrandSubtitle" class="truncate text-[10px] text-white/65"></p>
+        <p class="display-font truncate text-xl font-semibold leading-tight" id="welcomeHeading">Welcome, Supervisor</p>
+        <p class="mt-1 truncate text-sm text-white/75" id="projectName">Project not specified</p>
+      </div>
+      <div class="ml-auto flex items-center gap-3">
+        <div class="hidden items-center gap-2 text-xs font-medium text-white/75 sm:flex">
+          <span class="h-2 w-2 rounded-full bg-[#c9df65]"></span>
+          Site compliance
+        </div>
+        <button id="supabaseSettingsButton" type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-white/25 bg-white/10 text-white hover:bg-white/20" aria-label="Supabase connection settings" title="Supabase connection settings">
+          <i data-lucide="settings-2" class="h-4 w-4" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-3xl px-4 pb-12 pt-8 sm:px-7 sm:pt-12">
+    <div class="mb-6 sm:mb-8">
+      <p class="mb-2 text-xs font-bold uppercase text-[#477267]">Supervisor workspace</p>
+      <h1 class="display-font text-3xl font-semibold leading-tight text-[#263c36] sm:text-4xl">Choose an inspection</h1>
+      <p class="mt-2 max-w-xl text-sm leading-6 text-slate-600">Select the compliance activity you need to complete for this project.</p>
+    </div>
+
+    <p id="linkStatus" class="mb-4 hidden rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800" role="alert"></p>
+    <form id="supabaseSetupForm" class="mb-5 hidden space-y-3 rounded-lg border border-[#cfd6d1] bg-white p-4 shadow-sm" novalidate>
+      <div>
+        <h2 class="text-sm font-bold text-[#263c36]">Supabase cloud connection</h2>
+        <p class="mt-1 text-xs leading-5 text-slate-600">Connect this device once. All three inspection apps use these shared settings to upload PDF reports and inspection records.</p>
+      </div>
+      <label class="block text-xs font-semibold text-slate-700" for="supabaseProjectUrl">Supabase project URL
+        <input id="supabaseProjectUrl" type="url" required autocomplete="url" placeholder="https://your-project.supabase.co" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal" />
+      </label>
+      <label class="block text-xs font-semibold text-slate-700" for="supabaseAnonKey">Supabase anon key
+        <input id="supabaseAnonKey" type="password" required autocomplete="off" placeholder="Paste the Supabase anon/public key" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal" />
+      </label>
+      <p id="supabaseConnectionStatus" class="text-xs font-semibold text-slate-600" role="status"></p>
+      <button type="submit" class="rounded-md bg-[#075E54] px-4 py-2 text-sm font-semibold text-white">Verify and save connection</button>
+    </form>
+    <nav id="inspectionLinks" class="hidden space-y-3" aria-label="Inspection applications">
+      <a id="temporaryWorksLink" class="launch-link group flex min-h-[82px] items-center gap-4 rounded-xl border border-[#d8ded9] bg-white px-4 py-4 shadow-sm sm:px-5" href="tw_app.html">
+        <span class="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[#e7f0eb] text-[#075E54]" aria-hidden="true"><i data-lucide="construction" class="h-6 w-6"></i></span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-base font-bold text-[#263c36]">Temporary Works Inspection</span>
+          <span class="mt-1 block text-xs text-slate-500">Temporary works site checks</span>
+        </span>
+        <i data-lucide="arrow-up-right" class="h-5 w-5 shrink-0 text-slate-400 transition group-hover:text-[#075E54]" aria-hidden="true"></i>
+      </a>
+
+      <a id="puwerLink" class="launch-link group flex min-h-[82px] items-center gap-4 rounded-xl border border-[#d8ded9] bg-white px-4 py-4 shadow-sm sm:px-5" href="puwer_app.html">
+        <span class="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[#f8ead9] text-[#9a5e1c]" aria-hidden="true"><i data-lucide="drill" class="h-6 w-6"></i></span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-base font-bold text-[#263c36]">PUWER Equipment Inspection</span>
+          <span class="mt-1 block text-xs text-slate-500">Work equipment safety inspection</span>
+        </span>
+        <i data-lucide="arrow-up-right" class="h-5 w-5 shrink-0 text-slate-400 transition group-hover:text-[#075E54]" aria-hidden="true"></i>
+      </a>
+
+      <a id="havsLink" class="launch-link group flex min-h-[82px] items-center gap-4 rounded-xl border border-[#d8ded9] bg-white px-4 py-4 shadow-sm sm:px-5" href="havs_app.html">
+        <span class="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[#e5edf0] text-[#426f80]" aria-hidden="true"><i data-lucide="activity" class="h-6 w-6"></i></span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-base font-bold text-[#263c36]">HAVS Daily Briefing</span>
+          <span class="mt-1 block text-xs text-slate-500">Hand-arm vibration daily briefing</span>
+        </span>
+        <i data-lucide="arrow-up-right" class="h-5 w-5 shrink-0 text-slate-400 transition group-hover:text-[#075E54]" aria-hidden="true"></i>
+      </a>
+    </nav>
+
+    <p class="mt-7 border-t border-[#cfd6d1] pt-4 text-center text-xs text-slate-500">Your supervisor and project details will carry into the selected inspection.</p>
+  </main>
+
+  <script>
+    let sharedBranding = SharedBranding.readLocal();
+
+    async function applySharedBranding(client) {
+      sharedBranding = await SharedBranding.load(client, sharedBranding);
+      document.querySelector('header').style.backgroundColor = sharedBranding.color || '#075E54';
+      document.querySelector('header').style.color = sharedBranding.textColor || '#ffffff';
+      document.getElementById('sharedBrandTitle').textContent = sharedBranding.title || '';
+      document.getElementById('sharedBrandSubtitle').textContent = sharedBranding.subtitle || '';
+      const mark = document.getElementById('portalBrandMark');
+      if (sharedBranding.logoUrl) {
+        mark.replaceChildren();
+        const logo = document.createElement('img');
+        logo.src = sharedBranding.logoUrl;
+        logo.alt = 'Organization logo';
+        logo.className = 'portal-brand-logo';
+        logo.style.display = 'block';
+        mark.appendChild(logo);
+      }
+    }
+
+    async function initializeSupervisorPortal() {
+      const params = new URLSearchParams(window.location.search);
+      let supervisorName = (params.get('name') || '').trim();
+      let projectName = (params.get('project') || '').trim();
+      const token = params.get('token');
+      const requiresCloud = params.get('cloud') === '1';
+      const dbUrl = localStorage.getItem('tw_supa_url') || '';
+      const dbKey = localStorage.getItem('tw_supa_key') || '';
+      let brandingClient = null;
+      if (dbUrl && dbKey && window.supabase) {
+        try { brandingClient = window.supabase.createClient(dbUrl, dbKey); } catch (error) {}
+      }
+
+      if (!token && (supervisorName || projectName)) {
+        showLinkError('This supervisor link is missing its access token. Generate a new link from the officer dashboard.');
+        return;
+      }
+
+      if ((!token || requiresCloud) && (!dbUrl || !dbKey)) {
+        showSupabaseSetup();
+        return;
+      }
+
+      if (!token && dbUrl && dbKey) {
+        if (!window.supabase) {
+          showLinkError('The Supabase client could not be loaded. Check your connection and reload this page.');
+          return;
+        }
+        try {
+          const client = window.supabase.createClient(dbUrl, dbKey);
+          const { error } = await client.from('clients').select('id').limit(1);
+          if (error) throw error;
+        } catch (error) {
+          showLinkError('The Supabase connection could not be verified. Check the URL, anon key, and project access.');
+          showSupabaseSetup();
+          return;
+        }
+      }
+
+      if (token) {
+        if (dbUrl && dbKey && window.supabase) {
+          try {
+            const client = window.supabase.createClient(dbUrl, dbKey);
+            const { data, error } = await client.from('supervisor_links').select('token, supervisor_name, project').eq('token', token).eq('active', true).maybeSingle();
+            if (error || !data) throw new Error('This supervisor link is invalid or has been revoked.');
+            supervisorName = data.supervisor_name;
+            projectName = data.project;
+            localStorage.setItem('tw_supa_url', dbUrl);
+            localStorage.setItem('tw_supa_key', dbKey);
+          } catch (error) {
+            showLinkError(error.message || 'This supervisor link could not be verified.');
+            if (requiresCloud) showSupabaseSetup();
+            return;
+          }
+        } else if (requiresCloud) {
+          showLinkError('The Supabase client could not be loaded. Check your connection and reload this page.');
+          showSupabaseSetup();
+          return;
+        } else {
+          let links = [];
+          try { links = JSON.parse(localStorage.getItem('supervisor_links') || '[]'); } catch (error) {}
+          const link = links.find(item => String(item.token || item.id) === token && item.active !== false);
+          if (!link) {
+            showLinkError('This supervisor link is invalid or has been revoked. Connect to the same browser used to generate this offline link.');
+            return;
+          }
+          supervisorName = link.supervisor_name || link.name || supervisorName;
+          projectName = link.project || projectName;
+        }
+      }
+
+      if (dbUrl && dbKey && window.supabase) {
+        document.getElementById('supabaseConnectionStatus').textContent = 'Connected. This device will use Supabase for inspection reports.';
+      }
+      await applySharedBranding(brandingClient);
+      document.getElementById('supabaseSetupForm').classList.add('hidden');
+      document.getElementById('welcomeHeading').textContent = `Welcome, ${supervisorName || 'Supervisor'}`;
+      document.getElementById('projectName').textContent = projectName || 'Project not specified';
+      const context = new URLSearchParams(params);
+      context.delete('dbUrl');
+      context.delete('dbKey');
+      if (dbUrl && dbKey) context.set('cloud', '1');
+      context.set('name', supervisorName);
+      context.set('project', projectName);
+      const contextQuery = `?${context.toString()}`;
+      document.getElementById('temporaryWorksLink').href = `tw_app.html${contextQuery}`;
+      document.getElementById('puwerLink').href = `puwer_app.html${contextQuery}`;
+      document.getElementById('havsLink').href = `havs_app.html${contextQuery}`;
+      document.getElementById('inspectionLinks').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function showSupabaseSetup() {
+      document.getElementById('supabaseProjectUrl').value = localStorage.getItem('tw_supa_url') || '';
+      document.getElementById('supabaseAnonKey').value = localStorage.getItem('tw_supa_key') || '';
+      document.getElementById('supabaseConnectionStatus').textContent = 'Connection has not been verified on this device.';
+      document.getElementById('supabaseSetupForm').classList.remove('hidden');
+    }
+
+    function showLinkError(message) {
+      const status = document.getElementById('linkStatus');
+      status.textContent = message;
+      status.classList.remove('hidden');
+      document.getElementById('welcomeHeading').textContent = 'Supervisor link unavailable';
+      document.getElementById('projectName').textContent = '';
+    }
+
+    document.getElementById('supabaseSetupForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const dbUrl = document.getElementById('supabaseProjectUrl').value.trim();
+      const dbKey = document.getElementById('supabaseAnonKey').value.trim();
+      const status = document.getElementById('supabaseConnectionStatus');
+      if (!dbUrl || !dbKey) {
+        status.textContent = 'Enter both the Supabase project URL and anon key.';
+        return;
+      }
+      if (!window.supabase) {
+        status.textContent = 'Supabase client could not be loaded. Check your connection and reload this page.';
+        return;
+      }
+      status.textContent = 'Verifying Supabase connection…';
+      try {
+        const client = window.supabase.createClient(dbUrl, dbKey);
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+        const { data, error } = token && params.get('cloud') === '1'
+          ? await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle()
+          : await client.from('clients').select('id').limit(1);
+        if (error) throw error;
+        if (token && params.get('cloud') === '1' && !data) {
+          throw new Error('This supervisor link is invalid or has been revoked.');
+        }
+      } catch (error) {
+        status.textContent = `Could not connect: ${error.message || 'check the URL, anon key, and Supabase access policies.'}`;
+        return;
+      }
+      localStorage.setItem('tw_supa_url', dbUrl);
+      localStorage.setItem('tw_supa_key', dbKey);
+      status.textContent = 'Connected. This device will use Supabase for inspection reports.';
+      document.getElementById('linkStatus').classList.add('hidden');
+      await initializeSupervisorPortal();
+    });
+
+    document.getElementById('supabaseSettingsButton').addEventListener('click', showSupabaseSetup);
+    initializeSupervisorPortal();
+  </script>
+</body>
+</html>

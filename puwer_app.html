@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PUWER Inspection System</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="branding.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+    <style>
+        :root {
+            --wa-header: #075E54;
+            --wa-header-light: #128C7E;
+            --wa-bg: #E5DDD5;
+            --wa-bubble-app: #FFFFFF;
+            --wa-bubble-user: #DCF8C6;
+            --wa-text-grey: #667781;
+            --wa-green-btn: #25D366;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--wa-bg);
+            background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+            background-blend-mode: overlay;
+            height: 100vh;
+            height: -webkit-fill-available;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        header {
+            background-color: var(--wa-header);
+            color: white;
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            z-index: 10;
+            min-height: 60px;
+            flex-shrink: 0;
+        }
+        .header-info { display: flex; flex-direction: column; }
+        .shared-brand-row { display: flex; align-items: center; gap: 7px; }
+        .shared-brand-logo { display: none; max-width: 64px; height: 24px; object-fit: contain; border-radius: 3px; background: white; padding: 2px; }
+        .shared-brand-title { font-weight: 700; font-size: 0.72rem; }
+        .header-title { font-weight: bold; font-size: 1.1rem; }
+        .header-subtitle { font-size: 0.8rem; opacity: 0.8; }
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        .portal-link { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border-radius: 5px; background: rgba(0,0,0,0.3); color: white; font-size: 0.7rem; font-weight: bold; text-decoration: none; text-transform: uppercase; }
+        .portal-link:hover { background: rgba(0,0,0,0.45); }
+        .settings-btn { width: 34px; height: 34px; padding: 0; border: 1px solid rgba(255,255,255,0.35); border-radius: 50%; background: rgba(0,0,0,0.2); color: white; font-size: 1rem; cursor: pointer; }
+        .settings-btn:hover { background: rgba(0,0,0,0.4); }
+        .connection-error { color: #b91c1c; font-size: 0.85rem; text-align: left; }
+
+        #chat-container {
+            flex: 1; overflow-y: auto; padding: 15px;
+            display: flex; flex-direction: column; gap: 8px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .bubble {
+            max-width: 85%; padding: 8px 12px; border-radius: 8px;
+            font-size: 0.95rem; line-height: 1.4; position: relative;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1); word-wrap: break-word;
+        }
+        .bubble.app { background-color: var(--wa-bubble-app); color: #111; align-self: flex-start; border-top-left-radius: 0; }
+        .bubble.user { background-color: var(--wa-bubble-user); color: #111; align-self: flex-end; border-top-right-radius: 0; }
+        .bubble .time { font-size: 0.65rem; color: var(--wa-text-grey); float: right; margin-left: 10px; margin-top: 5px; }
+
+        .action-btn {
+            background-color: var(--wa-header-light); color: white; border: none;
+            padding: 8px 16px; border-radius: 15px; margin: 5px 5px 0 0;
+            font-size: 0.9rem; cursor: pointer; font-weight: bold;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .action-btn:hover { background-color: #0e7065; }
+
+        #input-area {
+            background-color: #F0F2F5; padding: 8px;
+            display: flex; align-items: center; gap: 8px; z-index: 10;
+            flex-shrink: 0; border-top: 1px solid #ddd;
+        }
+        #input-area.hidden { display: none; }
+        #text-input {
+            flex: 1; padding: 10px 15px; border-radius: 20px;
+            border: none; outline: none; font-size: 1rem; background: white; color: #111;
+        }
+        .send-btn {
+            background: var(--wa-header-light); color: white; border: none;
+            width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100;
+            justify-content: center; align-items: center; flex-direction: column;
+        }
+        .modal-content {
+            background: white; color: #111; padding: 20px; border-radius: 10px;
+            width: 90%; max-width: 400px; text-align: center;
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal-content h3 { margin-top: 0; color: var(--wa-header); }
+        .form-label {
+            display: block; text-align: left; font-size: 0.8rem; font-weight: bold;
+            color: #333; margin: 10px 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .modal input[type="text"], .modal input[type="number"], .modal input[type="url"], .modal input[type="password"] {
+            width: 100%; padding: 12px; margin: 0 0 5px 0;
+            border: 1px solid #ccc; border-radius: 5px;
+            box-sizing: border-box; font-size: 1rem;
+        }
+        .modal button {
+            background: var(--wa-green-btn); color: white; border: none;
+            padding: 12px 20px; border-radius: 5px; margin: 5px;
+            cursor: pointer; font-weight: bold; font-size: 1rem;
+        }
+        .modal button.danger { background: #FF5252; }
+        .modal button.secondary { background: var(--wa-header-light); }
+        #camera-video { width: 100%; max-height: 280px; background: black; border-radius: 8px; object-fit: cover; }
+
+        .choice-grid {
+            display: flex; flex-direction: column; gap: 6px; margin-top: 6px; width: 100%;
+        }
+        .choice-grid button {
+            background: #f0f2f5; color: #111; border: 1px solid #ccc;
+            padding: 10px 12px; border-radius: 8px; text-align: left; font-size: 0.9rem; cursor: pointer;
+            font-weight: 500;
+        }
+        .choice-grid button:hover { background: #e4e6eb; border-color: var(--wa-header-light); }
+
+        .explanation-box {
+            background-color: #f8f9fa; border-left: 4px solid var(--wa-header-light);
+            padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 0.85rem;
+            color: #444; text-align: left; margin: 8px 0;
+        }
+        .explanation-toggle { font-size: 0.75rem; color: var(--wa-header-light); cursor: pointer; text-decoration: underline; display: inline-block; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-info">
+            <div class="shared-brand-row"><img id="shared-brand-logo" class="shared-brand-logo" alt="Organization logo"><span class="shared-brand-title" id="shared-brand-title"></span></div>
+            <span class="header-subtitle" id="header-project">PUWER Inspection</span>
+            <span class="header-subtitle" id="header-manager">Setup Required</span>
+            <span class="header-subtitle" id="cloud-status" role="status">Local-only storage</span>
+        </div>
+        <div class="header-actions">
+            <a id="supervisor-portal-link" class="portal-link" href="supervisor.html" aria-label="Return to Supervisor Portal"><span aria-hidden="true">&larr;</span><span>Portal</span></a>
+            <button class="settings-btn" id="supabase-settings-button" type="button" aria-label="Supabase connection settings" title="Supabase connection settings">&#9881;</button>
+        </div>
+    </header>
+
+    <div id="chat-container"></div>
+
+    <div id="input-area" class="hidden">
+        <input type="text" id="text-input">
+        <button class="send-btn" id="send-btn">&#10148;</button>
+    </div>
+
+    <!-- Setup Modal -->
+    <div id="setup-modal" class="modal">
+        <div class="modal-content">
+            <h3>Site & Inspector Setup</h3>
+            <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">Enter your company, project and inspector details.</p>
+            <label class="form-label" for="setup-company">Company Name</label>
+            <input type="text" id="setup-company">
+            <label class="form-label" for="setup-project">Project Name</label>
+            <input type="text" id="setup-project">
+            <label class="form-label" for="setup-number">Project Number</label>
+            <input type="text" id="setup-number">
+            <label class="form-label" for="setup-name">Inspector Name</label>
+            <input type="text" id="setup-name">
+            <label class="form-label" for="setup-role">Role / Position</label>
+            <input type="text" id="setup-role">
+            <p style="font-size:0.85rem; color:#666; margin:10px 0 5px;">Company Logo (optional):</p>
+            <input type="file" id="setup-logo" accept="image/*" style="font-size: 0.85rem;">
+            <br><br>
+            <button id="setup-save">Save & Start Inspection</button>
+        </div>
+    </div>
+
+    <!-- Camera Modal -->
+    <div id="camera-modal" class="modal">
+        <div class="modal-content" style="background: #222; color: white;">
+            <h3 style="color:white;">Capture Photo Evidence</h3>
+            <p style="font-size:0.85rem; color:#ccc;">Take a clear photo of the inspected equipment.</p>
+            <video id="camera-video" autoplay playsinline></video>
+            <canvas id="camera-canvas" style="display:none;"></canvas>
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <button id="cam-capture" style="flex:1; background: var(--wa-green-btn);">Capture</button>
+                <button id="cam-cancel" class="danger" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signature Modal -->
+    <div id="sig-modal" class="modal">
+        <div class="modal-content">
+            <h3>Inspector Signature</h3>
+            <div style="border: 2px solid #ccc; border-radius: 5px; margin: 10px 0; background: #f9f9f9;">
+                <canvas id="sig-canvas" width="350" height="180" style="width: 100%; height: 180px; touch-action: none;"></canvas>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button id="sig-clear" class="danger" style="flex:1;">Clear</button>
+                <button id="sig-save" style="flex:1;">Confirm & PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="supabase-modal" class="modal">
+        <form id="supabase-form" class="modal-content" novalidate>
+            <h3>Supabase Connection</h3>
+            <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">Credentials stay on this device and are only shown here when you open this dialog.</p>
+            <label class="form-label" for="supabase-url">Project URL</label>
+            <input type="url" id="supabase-url" autocomplete="url" required>
+            <label class="form-label" for="supabase-key">Anon key</label>
+            <input type="password" id="supabase-key" autocomplete="off" required>
+            <p id="supabase-connection-status" class="connection-error" role="status" aria-live="polite"></p>
+            <button type="button" id="supabase-test-storage" class="secondary">Test Storage</button>
+            <button type="submit">Connect</button>
+            <button type="button" id="supabase-cancel" class="secondary">Cancel</button>
+        </form>
+    </div>
+
+    <script>
+        const SESSION_REF = "PUWER-" + new Date().toISOString().slice(0, 10).replace(/-/g, "") + "-" + Date.now().toString(36).toUpperCase().slice(-4);
+        const MAX_PHOTOS = 3;
+
+        let state = {
+            setup: { company: '', project: '', number: '', name: '', role: '', logo: null },
+            inspectionData: [],
+            currentItemIndex: 0,
+            currentQuestionIndex: 0,
+            currentAnswers: {},
+            currentPhotos: {},
+            step: 'INIT',
+            stream: null
+        };
+
+        let SUPABASE_URL = localStorage.getItem('tw_supa_url') || '';
+        let SUPABASE_ANON_KEY = localStorage.getItem('tw_supa_key') || '';
+        let supabaseClient = null;
+        let cloudRequired = false;
+        let branding = SharedBranding.readLocal();
+
+        function applySharedBranding() {
+            const header = document.querySelector('header');
+            const brandTitle = document.getElementById('shared-brand-title');
+            const brandLogo = document.getElementById('shared-brand-logo');
+            header.style.backgroundColor = branding.color || '#075E54';
+            header.style.color = branding.textColor || '#ffffff';
+            brandTitle.textContent = branding.title || 'PUWER Inspection';
+            if (branding.logoUrl) {
+                brandLogo.src = branding.logoUrl;
+                brandLogo.style.display = 'block';
+            } else {
+                brandLogo.style.display = 'none';
+            }
+        }
+
+        function reportLogo() {
+            return branding.logoDataUrl || state.setup.logo || '';
+        }
+        let lastGeneratedPdfBlob = null;
+
+        function setCloudStatus(message) {
+            const status = document.getElementById('cloud-status');
+            if (status) status.textContent = message;
+        }
+
+        function initializeCloudSync() {
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) {
+                setCloudStatus('Local-only storage');
+                return;
+            }
+            try {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                setCloudStatus('Cloud sync ready');
+            } catch (error) {
+                console.warn('Supabase initialization failed:', error);
+                setCloudStatus('Local-only storage');
+            }
+        }
+
+        function openSupabaseSettings() {
+            document.getElementById('supabase-url').value = SUPABASE_URL;
+            document.getElementById('supabase-key').value = SUPABASE_ANON_KEY;
+            document.getElementById('supabase-connection-status').textContent = '';
+            document.getElementById('supabase-modal').style.display = 'flex';
+        }
+
+        async function connectSupabase(event) {
+            event.preventDefault();
+            const dbUrl = document.getElementById('supabase-url').value.trim();
+            const dbKey = document.getElementById('supabase-key').value.trim();
+            const status = document.getElementById('supabase-connection-status');
+            status.textContent = 'Checking connection...';
+            try {
+                const client = window.supabase.createClient(dbUrl, dbKey);
+                const params = new URLSearchParams(window.location.search);
+                const token = params.get('token');
+                if (cloudRequired && token) {
+                    const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
+                    if (error) throw error;
+                    if (!data) throw new Error('This supervisor link is not active in the selected Supabase project.');
+                } else {
+                    const { error } = await client.from('clients').select('id').limit(1);
+                    if (error) throw error;
+                }
+                localStorage.setItem('tw_supa_url', dbUrl);
+                localStorage.setItem('tw_supa_key', dbKey);
+                SUPABASE_URL = dbUrl;
+                SUPABASE_ANON_KEY = dbKey;
+                supabaseClient = client;
+                setCloudStatus('Cloud sync ready');
+                document.getElementById('supabase-modal').style.display = 'none';
+            } catch (error) {
+                status.textContent = error.message || 'Could not connect to Supabase. Check the URL, anon key, tables, and access policies.';
+            }
+        }
+
+        async function testSupabaseStorage() {
+            const status = document.getElementById('supabase-connection-status');
+            const dbUrl = document.getElementById('supabase-url').value.trim();
+            const dbKey = document.getElementById('supabase-key').value.trim();
+            if (!dbUrl || !dbKey) {
+                status.textContent = 'Enter the project URL and anon key before testing Storage.';
+                return;
+            }
+            if (!window.supabase) {
+                status.textContent = 'Supabase client could not be loaded. Check your connection and reload the app.';
+                return;
+            }
+            const filePath = 'puwer/puwer_storage_test/PUWER_Storage_Test_' + Date.now() + '.pdf';
+            status.textContent = 'Testing Storage upload and cleanup...';
+            try {
+                const storage = window.supabase.createClient(dbUrl, dbKey).storage.from('reports');
+                const testPdf = lastGeneratedPdfBlob || new Blob(['%PDF-1.4\n', ' '.repeat(300 * 1024), '\n%%EOF'], { type: 'application/pdf' });
+                const testingLastReport = Boolean(lastGeneratedPdfBlob);
+                const { error: uploadError } = await storage.upload(filePath, testPdf, {
+                    contentType: 'application/pdf',
+                    upsert: true
+                });
+                if (uploadError) throw uploadError;
+                const { error: removeError } = await storage.remove([filePath]);
+                if (removeError) throw removeError;
+                status.textContent = testingLastReport
+                    ? 'Last report PDF uploaded and removed at a neutral path. The previous failure is caused by its original path/name.'
+                    : 'PDF Storage test passed: temporary PDF uploaded and removed.';
+            } catch (error) {
+                const message = getCloudErrorMessage(error);
+                status.textContent = message.toLowerCase().includes('load failed')
+                    ? `PDF Storage test failed before Supabase returned an HTTP response (Load failed). Check the phone connection, VPN, or content blocker. (PDF 0.3 MB; bucket reports; path ${filePath})`
+                    : `PDF Storage test failed: ${message} (PDF 0.3 MB; bucket reports; path ${filePath})`;
+            }
+        }
+
+        document.getElementById('supabase-settings-button').onclick = openSupabaseSettings;
+        document.getElementById('supabase-cancel').onclick = function() { document.getElementById('supabase-modal').style.display = 'none'; };
+        document.getElementById('supabase-form').addEventListener('submit', connectSupabase);
+        document.getElementById('supabase-test-storage').addEventListener('click', testSupabaseStorage);
+
+        function getAuditProjectIds(projectName) {
+            function readArray(key) {
+                try {
+                    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (error) { return []; }
+            }
+            const clients = readArray('tw_clients');
+            const sites = readArray('tw_sites');
+            const matchedSite = sites.find(site => String(site.name || '').toLowerCase() === projectName.toLowerCase());
+            const matchedClient = (matchedSite && clients.find(client => String(client.id) === String(matchedSite.clientId))) ||
+                clients.find(client => String(client.name || '').toLowerCase() === projectName.toLowerCase());
+            return { clientId: matchedClient ? matchedClient.id : null, siteId: matchedSite ? matchedSite.id : null };
+        }
+
+        function savePuwerAuditLocally(audit) {
+            try {
+                const saved = JSON.parse(localStorage.getItem('puwer_records') || '[]');
+                const records = Array.isArray(saved) ? saved : [];
+                const index = records.findIndex(record => record && record.id === audit.id);
+                if (index >= 0) records[index] = audit;
+                else records.push(audit);
+                localStorage.setItem('puwer_records', JSON.stringify(records));
+            } catch (error) {
+                console.warn('Could not save PUWER audit locally:', error);
+            }
+        }
+
+        function getCloudErrorMessage(error) {
+            if (!error) return 'Unknown Supabase error';
+            return [
+                error.message || String(error),
+                error.code ? 'Code: ' + error.code : '',
+                error.details ? 'Details: ' + error.details : '',
+                error.hint ? 'Hint: ' + error.hint : ''
+            ].filter(Boolean).join(' ');
+        }
+
+        function isRetryableNetworkError(error) {
+            const message = getCloudErrorMessage(error).toLowerCase();
+            return message.includes('load failed') || message.includes('failed to fetch') || message.includes('networkerror');
+        }
+
+        async function uploadPuwerPdf(audit, pdfBlob, fileName) {
+            if (!supabaseClient) return null;
+            const filePath = 'puwer/' + audit.id + '/PUWER_' + audit.id + '.pdf';
+            const pdfSizeMb = (pdfBlob.size / (1024 * 1024)).toFixed(1);
+            try {
+                const maxAttempts = 3;
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    try {
+                        const uploadRequest = supabaseClient.storage.from('reports').upload(filePath, pdfBlob, {
+                            contentType: 'application/pdf',
+                            upsert: true
+                        });
+                        const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('PDF upload timed out after 30 seconds')), 30000));
+                        const { error } = await Promise.race([uploadRequest, timeout]);
+                        if (error) throw error;
+                        break;
+                    } catch (error) {
+                        if (!isRetryableNetworkError(error) || attempt === maxAttempts) throw error;
+                        setCloudStatus(`Network interrupted; retrying PDF upload (${attempt + 1}/${maxAttempts})...`);
+                        await new Promise(resolve => setTimeout(resolve, attempt * 700));
+                    }
+                }
+                const { data } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
+                return data ? data.publicUrl : null;
+            } catch (error) {
+                throw new Error(`${getCloudErrorMessage(error)} (PDF ${pdfSizeMb} MB; bucket reports; path ${filePath})`);
+            }
+        }
+
+        async function syncPuwerAudit(audit, pdfBlob, fileName) {
+            savePuwerAuditLocally(audit);
+            if (!supabaseClient) {
+                setCloudStatus('Saved locally; cloud keys not configured');
+                if (cloudRequired) throw new Error('Supabase is not connected. Return to the Supervisor Portal and configure the cloud connection.');
+                return;
+            }
+            let syncStage = 'PDF upload';
+            try {
+                audit.pdfUrl = await uploadPuwerPdf(audit, pdfBlob, fileName) || '';
+                if (!audit.pdfUrl) throw new Error('Supabase uploaded the PUWER PDF but did not return its public URL.');
+                savePuwerAuditLocally(audit);
+                syncStage = 'audit record save';
+                const insertRequest = supabaseClient.from('audits').insert([audit]);
+                const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Audit sync timed out after 30 seconds')), 30000));
+                const { error } = await Promise.race([insertRequest, timeout]);
+                if (error) throw error;
+                setCloudStatus('Audit and PDF synced');
+            } catch (error) {
+                const message = getCloudErrorMessage(error);
+                console.error('PUWER Supabase ' + syncStage + ' failed:', error);
+                setCloudStatus('Supabase ' + syncStage + ' failed');
+                throw new Error(syncStage + ' failed: ' + message);
+            }
+        }
+
+        const questions = [
+            {
+                id: 1,
+                title: "Question 1 – Equipment Identification",
+                question: "What is the name of the tool, its maker, its reference registration number, and who is its owner?",
+                explanation: "Pinpoint exactly what equipment you are looking at. Look for brand or manufacturer name, serial or asset number on the label plate, and inventory ownership markings."
+            },
+            {
+                id: 2,
+                title: "Question 2 – Power Source",
+                question: "What is the power source of the tool: battery powered, 110V powered, 240V powered, or not a power tool?",
+                explanation: "Determine how the tool is powered to confirm electrical safety checks. Yellow plugs indicate 110V, blue indicate 240V, or choose battery / manual.",
+                type: "choice",
+                choices: ["Battery Powered", "110V Powered", "240V Powered", "Not a Power Tool"]
+            },
+            {
+                id: 3,
+                title: "Question 3 – Power Components & Safety",
+                question: "Are the battery, cable, plug, switch, and emergency stop system all intact, and is the emergency stop functioning properly?",
+                explanation: "Inspect battery for leaks, cable for cuts, plug pins for burns, and verify switch and emergency stop functionality.",
+                type: "choice",
+                choices: ["Yes – All Intact & Functioning", "No – Issues Found"]
+            },
+            {
+                id: 4,
+                title: "Question 4 – Body & Structural Integrity",
+                question: "Is the tool's body free of cracks, bends, missing parts, or any components that appear altered or compromised?",
+                explanation: "Check the body carefully for visible cracks, bends, and confirm attachments are secure and unmodified.",
+                type: "choice",
+                choices: ["Yes – Body is Intact", "No – Damage/Alterations Found"]
+            },
+            {
+                id: 5,
+                title: "Question 5 – Calibration & Functionality",
+                question: "Does the tool require calibration, and if so, what is its status? Is the tool appropriate for safely undertaking the job, and has its functionality been tested?",
+                explanation: "Check calibration status for testing/measuring devices and confirm operational safety."
+            }
+        ];
+
+        const chatContainer = document.getElementById('chat-container');
+        const textInput = document.getElementById('text-input');
+        const sendBtn = document.getElementById('send-btn');
+        const inputArea = document.getElementById('input-area');
+
+        function getTime() {
+            var now = new Date();
+            return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+        }
+
+        function addAppBubble(text) {
+            var div = document.createElement('div');
+            div.className = 'bubble app';
+            div.appendChild(document.createTextNode(text));
+            var ts = document.createElement('span'); ts.className = 'time'; ts.innerText = getTime();
+            div.appendChild(ts);
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addUserBubble(text) {
+            var div = document.createElement('div');
+            div.className = 'bubble user';
+            div.appendChild(document.createTextNode(text));
+            var ts = document.createElement('span'); ts.className = 'time'; ts.innerText = getTime();
+            div.appendChild(ts);
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addHTMLBubble(html) {
+            var div = document.createElement('div');
+            div.className = 'bubble app';
+            div.innerHTML = html + '<span class="time">' + getTime() + '</span>';
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addActionButtons(btn1Text, btn2Text, action1, action2) {
+            var div = document.createElement('div');
+            div.className = 'bubble app';
+            div.style.background = 'transparent'; div.style.boxShadow = 'none'; div.style.padding = '0';
+            div.style.display = 'flex'; div.style.gap = '8px'; div.style.flexWrap = 'wrap';
+            var b1 = document.createElement('button'); b1.className = 'action-btn'; b1.innerText = btn1Text;
+            b1.onclick = function() { action1(); };
+            var b2 = document.createElement('button'); b2.className = 'action-btn'; b2.innerText = btn2Text;
+            b2.onclick = function() { action2(); };
+            div.appendChild(b1); div.appendChild(b2);
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function setInputVisible(visible) {
+            if (visible) {
+                inputArea.classList.remove('hidden');
+                textInput.focus();
+            } else {
+                inputArea.classList.add('hidden');
+                textInput.value = '';
+            }
+        }
+
+        async function validateSupervisorLink(params) {
+            const token = params.get('token');
+            if (!token) return true;
+            const cloudLink = params.get('cloud') === '1';
+            const dbUrl = localStorage.getItem('tw_supa_url') || '';
+            const dbKey = localStorage.getItem('tw_supa_key') || '';
+            if (dbUrl && dbKey && window.supabase) {
+                try {
+                    const client = window.supabase.createClient(dbUrl, dbKey);
+                    const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
+                    if (cloudLink || !error) return !error && Boolean(data);
+                } catch (error) { return false; }
+            }
+            if (cloudLink) return false;
+            try {
+                const links = JSON.parse(localStorage.getItem('supervisor_links') || '[]');
+                return links.some(link => String(link.token || link.id) === token && link.active !== false);
+            } catch (error) { return false; }
+        }
+
+        window.onload = async function() {
+            const params = new URLSearchParams(window.location.search);
+            cloudRequired = params.get('cloud') === '1';
+            initializeCloudSync();
+            branding = await SharedBranding.load(supabaseClient, branding);
+            applySharedBranding();
+            loadSetup();
+            if (cloudRequired && !supabaseClient) {
+                alert('Supabase is not connected. Configure the cloud connection in the Supervisor Portal before starting this inspection.');
+                window.location.replace('supervisor.html' + (window.location.search || ''));
+                return;
+            }
+            if (!(await validateSupervisorLink(params))) {
+                alert('This supervisor link is invalid or has been revoked.');
+                window.location.replace('supervisor.html' + (window.location.search || ''));
+                return;
+            }
+            const supervisorName = (params.get('name') || '').trim();
+            const projectName = (params.get('project') || '').trim();
+            document.getElementById('supervisor-portal-link').href = 'supervisor.html' + (window.location.search || '');
+            if (supervisorName && projectName) {
+                state.setup.name = supervisorName;
+                state.setup.project = projectName;
+                updateHeader();
+                startBriefing();
+            } else {
+                document.getElementById('setup-modal').style.display = 'flex';
+            }
+        };
+
+        function loadSetup() {
+            try { const saved = localStorage.getItem('puwer_setup'); if (saved) state.setup = JSON.parse(saved); } catch (e) {}
+        }
+        function saveSetup() {
+            try { localStorage.setItem('puwer_setup', JSON.stringify(state.setup)); } catch (e) {}
+            updateHeader();
+        }
+        function updateHeader() {
+            document.getElementById('header-project').innerText = state.setup.project || 'PUWER Inspection';
+            document.getElementById('header-manager').innerText = state.setup.name ? state.setup.name + (state.setup.role ? ' (' + state.setup.role + ')' : '') : 'Setup Required';
+        }
+
+        function startBriefing() {
+            state.step = 'BRIEFING';
+            const briefingText = "Welcome to the PUWER safety inspection module. It is your legal responsibility to ensure all work equipment operated on site is safe.";
+            addAppBubble("📋 PUWER Audit Briefing\n\n" + briefingText);
+            setTimeout(startQuestionFlow, 500);
+        }
+
+        function startQuestionFlow() {
+            state.currentQuestionIndex = 0;
+            state.currentAnswers = {};
+            state.currentPhotos = {};
+            askCurrentQuestion();
+        }
+
+        function askCurrentQuestion() {
+            const q = questions[state.currentQuestionIndex];
+            state.step = 'QUESTION_' + q.id;
+
+            let html = '<div style="font-weight:bold; color:var(--wa-header-light); margin-bottom:4px;">Item ' + (state.currentItemIndex + 1) + ' • ' + q.title + '</div>';
+            html += '<div style="margin-bottom:6px;">' + q.question + '</div>';
+            html += '<div><span class="explanation-toggle" onclick="toggleExp(' + q.id + ')">ℹ️ Show Explanation</span>';
+            html += '<div id="exp-' + q.id + '" class="explanation-box" style="display:none;">' + q.explanation + '</div></div>';
+
+            if (q.type === 'choice') {
+                html += '<div class="choice-grid">';
+                q.choices.forEach(c => {
+                    html += '<button onclick="handleChoiceAnswer(\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</button>';
+                });
+                html += '</div>';
+                setInputVisible(false);
+            } else {
+                html += '<div style="margin-top:6px; font-size:0.8rem; color:#667781;">Type your answer below and press send or enter.</div>';
+                setInputVisible(true);
+            }
+
+            addHTMLBubble(html);
+        }
+
+        window.toggleExp = function(id) {
+            const el = document.getElementById('exp-' + id);
+            if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        };
+
+        function handleChoiceAnswer(choice) {
+            addUserBubble(choice);
+            const q = questions[state.currentQuestionIndex];
+            state.currentAnswers['q' + q.id] = choice;
+            promptForPhotoEvidence();
+        }
+
+        function handleTextAnswer(text) {
+            addUserBubble(text);
+            const q = questions[state.currentQuestionIndex];
+            state.currentAnswers['q' + q.id] = text;
+            promptForPhotoEvidence();
+        }
+
+        function promptForPhotoEvidence() {
+            state.step = 'PHOTO_PROMPT';
+            const q = questions[state.currentQuestionIndex];
+            if (!state.currentPhotos['q' + q.id]) state.currentPhotos['q' + q.id] = [];
+            const count = state.currentPhotos['q' + q.id].length;
+            const msg = count === 0 ? "Would you like to take a photo of this equipment?" : `You have ${count} photo(s) for this question. Add another?`;
+            addAppBubble(' Photo Evidence (Q' + q.id + ' - ' + count + '/' + MAX_PHOTOS + '): ' + msg);
+            setInputVisible(false);
+
+            addActionButtons(count === 0 ? ' Take Photo' : '📸 Add Another', 'Skip / Done',
+                function() {
+                    if (state.currentPhotos['q' + q.id].length < MAX_PHOTOS) {
+                        openCamera();
+                    } else {
+                        alert('Maximum ' + MAX_PHOTOS + ' photos reached for this question.');
+                        proceedNextQuestion();
+                    }
+                },
+                function() { proceedNextQuestion(); }
+            );
+        }
+
+        function proceedNextQuestion() {
+            state.currentQuestionIndex++;
+            if (state.currentQuestionIndex < questions.length) {
+                askCurrentQuestion();
+            } else {
+                saveInspectedItem();
+            }
+        }
+
+        function saveInspectedItem() {
+            for (let i = 1; i <= questions.length; i++) {
+                if (!state.currentAnswers['q' + i]) state.currentAnswers['q' + i] = 'Not answered';
+            }
+            state.inspectionData.push({
+                itemNumber: state.currentItemIndex + 1,
+                ...state.currentAnswers,
+                photos: { ...state.currentPhotos }
+            });
+
+            state.step = 'ITEM_FINISHED';
+            addAppBubble('✅ Item ' + (state.currentItemIndex + 1) + ' successfully recorded! Would you like to inspect another item or generate the final report?');
+            setInputVisible(false);
+            addActionButtons('Inspect New Item', 'Generate Report',
+                function() {
+                    state.currentItemIndex++;
+                    state.currentAnswers = {};
+                    state.currentPhotos = {};
+                    state.currentQuestionIndex = 0; // FIX: Reset question index
+                    startQuestionFlow();
+                },
+                function() {
+                    openSignature();
+                }
+            );
+        }
+
+        var camModal = document.getElementById('camera-modal');
+        var video = document.getElementById('camera-video');
+        var canvas = document.getElementById('camera-canvas');
+
+        function openCamera() {
+            camModal.style.display = 'flex';
+            try {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream) {
+                    state.stream = stream; video.srcObject = stream;
+                }).catch(function(e) {
+                    camModal.style.display = 'none';
+                    promptForPhotoEvidence(); // FIX: Return to prompt on error
+                });
+            } catch (e) { camModal.style.display = 'none'; promptForPhotoEvidence(); }
+        }
+
+        document.getElementById('cam-capture').onclick = function() {
+            const sourceWidth = video.videoWidth || 640;
+            const sourceHeight = video.videoHeight || 480;
+            const scale = Math.min(1, 1280 / Math.max(sourceWidth, sourceHeight));
+            canvas.width = Math.round(sourceWidth * scale);
+            canvas.height = Math.round(sourceHeight * scale);
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const q = questions[state.currentQuestionIndex];
+            if (!state.currentPhotos['q' + q.id]) state.currentPhotos['q' + q.id] = [];
+            state.currentPhotos['q' + q.id].push(canvas.toDataURL('image/jpeg', 0.72));
+            stopCamera();
+            promptForPhotoEvidence(); // FIX: Return to prompt to ask for more or skip
+        };
+
+        document.getElementById('cam-cancel').onclick = function() {
+            stopCamera();
+            promptForPhotoEvidence(); // FIX: Return to prompt instead of skipping question
+        };
+
+        function stopCamera() {
+            if (state.stream) { state.stream.getTracks().forEach(function(t){ t.stop(); }); state.stream = null; }
+            camModal.style.display = 'none';
+        }
+
+        sendBtn.addEventListener('click', function() {
+            var val = textInput.value.trim();
+            if (!val) return;
+            textInput.value = '';
+            if (state.step.startsWith('QUESTION_')) {
+                const q = questions[state.currentQuestionIndex];
+                if (q.type !== 'choice') handleTextAnswer(val);
+            }
+        });
+
+        textInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && textInput.value.trim()) {
+                sendBtn.click();
+            }
+        });
+
+        var sigModal = document.getElementById('sig-modal');
+        var sigCanvas = document.getElementById('sig-canvas');
+        var sigPad = null;
+
+        function openSignature() {
+            sigModal.style.display = 'flex';
+            if (!sigPad) sigPad = new SignaturePad(sigCanvas, { backgroundColor: 'rgb(249,249,249)' });
+            else sigPad.clear();
+        }
+        document.getElementById('sig-clear').onclick = function() { sigPad.clear(); };
+        document.getElementById('sig-save').onclick = async function() {
+            if (sigPad.isEmpty()) { alert('Please provide a signature first.'); return; }
+            sigModal.style.display = 'none';
+            try {
+                await generatePDF(sigPad.toDataURL());
+            } catch (error) {
+                alert('The report was downloaded, but could not be saved to Supabase: ' + error.message);
+            }
+        };
+
+        async function generatePDF(sigData) {
+            var jsPDF = window.jspdf.jsPDF;
+            var doc = new jsPDF('landscape', 'mm', 'a4');
+            var PW = doc.internal.pageSize.getWidth();
+            var PH = doc.internal.pageSize.getHeight();
+            var M = 15, UW = PW - 2 * M;
+            var LIMIT = PH - 16;
+            let y = 0;
+
+            function drawRunningHeader() {
+                doc.setFillColor(branding.color || '#075E54');
+                doc.rect(0, 0, PW, 22, 'F');
+                let logoOffset = 0;
+                if (reportLogo()) {
+                    try {
+                        var logoImage = reportLogo();
+                        var logoFmt = (logoImage.indexOf('data:image/png') === 0) ? 'PNG' : 'JPEG';
+                        var imgProps = doc.getImageProperties(logoImage);
+                        var ratio = imgProps.width / imgProps.height;
+                        var finalH = 14; var finalW = finalH * ratio;
+                        doc.addImage(logoImage, logoFmt, M, (22 - finalH) / 2, finalW, finalH);
+                        logoOffset = finalW + 10;
+                    } catch (e) {}
+                }
+                doc.setTextColor(branding.textColor || '#ffffff');
+                doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+                doc.text((branding.title || 'Company') + ' | PUWER INSPECTION REPORT', M + logoOffset, 9);
+                doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+                doc.text((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), M + logoOffset, 16);
+                doc.text(state.setup.name + ' (' + state.setup.role + ')', PW - M, 9, { align: 'right' });
+                doc.text(new Date().toLocaleDateString('en-GB') + ' | Ref: ' + SESSION_REF, PW - M, 16, { align: 'right' });
+            }
+
+            // FIX: Simplified Stamp
+            function drawStamp(text, cx, cy, r, g, b) {
+                doc.setDrawColor(r, g, b);
+                doc.setLineWidth(1.5);
+                doc.roundedRect(cx - 25, cy - 10, 50, 20, 3, 3, 'S');
+                doc.setTextColor(r, g, b);
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(12);
+                doc.text(text, cx, cy + 4, { align: "center" });
+                doc.setTextColor(0, 0, 0);
+            }
+
+            // Cover / First Page Header Block
+            doc.setFillColor(branding.color || '#075E54');
+            doc.rect(0, 0, PW, 35, 'F');
+            let logoOffset = 0;
+            if (reportLogo()) {
+                try {
+                    var logoImage = reportLogo();
+                    var logoFmt = (logoImage.indexOf('data:image/png') === 0) ? 'PNG' : 'JPEG';
+                    var imgProps = doc.getImageProperties(logoImage);
+                    var ratio = imgProps.width / imgProps.height;
+                    var finalH = 22; var finalW = finalH * ratio;
+                    doc.addImage(logoImage, logoFmt, M, (35 - finalH) / 2, finalW, finalH);
+                    logoOffset = finalW + 10;
+                } catch (e) {}
+            }
+            doc.setTextColor(branding.textColor || '#ffffff');
+            doc.setFontSize(18); doc.setFont('helvetica', 'bold');
+            doc.text((branding.title || 'Company') + ' | PUWER INSPECTION REPORT', M + logoOffset, 14);
+            doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+            doc.text((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), M + logoOffset, 22);
+            doc.text(state.setup.name + ' (' + state.setup.role + ')', PW - M, 14, { align: 'right' });
+            doc.text(new Date().toLocaleDateString('en-GB') + ' | Ref: ' + SESSION_REF, PW - M, 22, { align: 'right' });
+
+            y = 45;
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+            doc.text('Inspector Details', M, y); y += 8;
+            doc.setDrawColor(200, 200, 200); doc.line(M, y, PW - M, y); y += 8;
+
+            doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+            doc.text('Inspector Name:', M, y); doc.setFont('helvetica', 'bold'); doc.text(state.setup.name || 'N/A', M + 40, y);
+            doc.setFont('helvetica', 'normal'); doc.text('Company:', M + 110, y); doc.setFont('helvetica', 'bold'); doc.text(state.setup.company || 'N/A', M + 135, y);
+            y += 7;
+            doc.setFont('helvetica', 'normal'); doc.text('Project Name:', M, y); doc.setFont('helvetica', 'bold'); doc.text(state.setup.project || 'N/A', M + 40, y);
+            doc.setFont('helvetica', 'normal'); doc.text('Date:', M + 110, y); doc.setFont('helvetica', 'bold'); doc.text(new Date().toLocaleDateString('en-GB'), M + 135, y);
+            y += 12;
+
+            doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+            doc.text('Inspection Summary Table', M, y); y += 8;
+
+            var COLW = [95, 112, 60];
+            var X2 = M + COLW[0], X3 = X2 + COLW[1];
+
+            function headerRow() {
+                doc.setFillColor(240, 240, 240); doc.rect(M, y, UW, 8, 'F');
+                doc.setDrawColor(150, 150, 150); doc.rect(M, y, COLW[0], 8); doc.rect(X2, y, COLW[1], 8); doc.rect(X3, y, COLW[2], 8);
+                doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 0, 0);
+                doc.text('Question / Check', M + 2, y + 5.5);
+                doc.text('Findings / Answer', X2 + 2, y + 5.5);
+                doc.text('Photo Evidence', X3 + 2, y + 5.5);
+                y += 8;
+            }
+
+            function isItemSafe(item) {
+                let ans3 = (item.q3 || '').toLowerCase();
+                let ans4 = (item.q4 || '').toLowerCase();
+                if (ans3.includes('no') || ans4.includes('no')) return false;
+                return true;
+            }
+
+            state.inspectionData.forEach(item => {
+                if (y > LIMIT - 30) {
+                    doc.addPage();
+                    drawRunningHeader();
+                    y = 30;
+                }
+                let safe = isItemSafe(item);
+                doc.setFillColor(branding.color || '#075E54'); doc.rect(M, y, UW, 9, 'F');
+                doc.setTextColor(branding.textColor || '#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+                doc.text('EQUIPMENT ITEM #' + item.itemNumber, M + 4, y + 6);
+                y += 9;
+
+                headerRow();
+                let startY = y;
+
+                questions.forEach(q => {
+                    let ans = item['q' + q.id] || 'N/A';
+                    let photos = (item.photos && item.photos['q' + q.id]) || [];
+
+                    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+                    let qLines = doc.splitTextToSize(q.title + '\n' + q.question, COLW[0] - 4);
+                    let aLines = doc.splitTextToSize(ans, COLW[1] - 4);
+                    let photoH = photos.length > 0 ? 32 : 10;
+                    let h = Math.max(qLines.length * 4 + 4, aLines.length * 4 + 4, photoH + 4, 14);
+
+                    if (y + h > LIMIT) {
+                        doc.addPage();
+                        drawRunningHeader();
+                        y = 30;
+                        headerRow();
+                    }
+
+                    doc.setDrawColor(200, 200, 200);
+                    doc.rect(M, y, COLW[0], h); doc.rect(X2, y, COLW[1], h); doc.rect(X3, y, COLW[2], h);
+
+                    doc.setTextColor(0, 0, 0);
+                    doc.text(qLines, M + 2, y + 4.5);
+                    doc.text(aLines, X2 + 2, y + 4.5);
+
+                    if (photos.length > 0) {
+                        try {
+                            doc.addImage(photos[0], 'JPEG', X3 + 2, y + 1, 35, h - 2);
+                        } catch(e){}
+                    } else {
+                        doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150);
+                        doc.text('No photo', X3 + 2, y + 6);
+                        doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'normal');
+                    }
+                    y += h;
+                });
+
+                drawStamp(safe ? 'SAFE' : 'NOT SAFE', M + UW * 0.62, (startY + y) / 2, safe ? 22 : 220, safe ? 163 : 38, safe ? 74 : 38);
+                y += 6;
+            });
+
+            // Extra Photos Appendix
+            let hasExtraPhotos = state.inspectionData.some(item => item.photos && Object.values(item.photos).some(arr => arr.length > 1));
+            if (hasExtraPhotos) {
+                doc.addPage();
+                drawRunningHeader();
+                y = 30;
+                doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+                doc.text('Additional Equipment Photo Appendix', M, y); y += 8;
+                state.inspectionData.forEach(item => {
+                    if (item.photos) {
+                        Object.keys(item.photos).forEach(key => {
+                            let arr = item.photos[key];
+                            if (arr && arr.length > 1) {
+                                let qNum = key.replace('q', '');
+                                doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+                                doc.text('Item #' + item.itemNumber + ' (Question ' + qNum + ') Extra Photos:', M, y + 4); y += 6;
+                                let px = M;
+                                arr.slice(1).forEach(ph => {
+                                    if (y + 40 > LIMIT) { doc.addPage(); drawRunningHeader(); y = 30; }
+                                    try { doc.addImage(ph, 'JPEG', px, y, 50, 38); } catch(e){}
+                                    px += 55;
+                                    if (px > PW - M - 50) { px = M; y += 42; }
+                                });
+                                y += 45;
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Final Summary Page
+            doc.addPage();
+            drawRunningHeader();
+            y = 30;
+            doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+            doc.text('Inspection Executive Summary & Failed Items', M, y); y += 10;
+
+            let totalItems = state.inspectionData.length;
+            let safeCount = state.inspectionData.filter(i => isItemSafe(i)).length;
+            let unsafeCount = totalItems - safeCount;
+
+            let chartX = M, chartY = y, chartW = 120, chartH = 65;
+            doc.setDrawColor(200, 200, 200); doc.setFillColor(248, 249, 250);
+            doc.roundedRect(chartX, chartY, chartW, chartH, 3, 3, 'FD');
+            doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(7, 94, 84);
+            doc.text('Overall Inspection Breakdown', chartX + 10, chartY + 10);
+
+            doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(0, 0, 0);
+            doc.text('Total Equipment Inspected: ' + totalItems, chartX + 10, chartY + 22);
+            doc.text('Safe / Passed Items: ' + safeCount, chartX + 10, chartY + 30);
+            doc.text('Not Safe / Failed Items: ' + unsafeCount, chartX + 10, chartY + 38);
+
+            let barMaxWidth = 100;
+            let safeBarW = totalItems > 0 ? (safeCount / totalItems) * barMaxWidth : 0;
+            let unsafeBarW = totalItems > 0 ? (unsafeCount / totalItems) * barMaxWidth : 0;
+
+            doc.setFontSize(8);
+            doc.text('Safe', chartX + 10, chartY + 48);
+            doc.setFillColor(37, 211, 102);
+            doc.rect(chartX + 35, chartY + 44, safeBarW || 2, 5, 'F');
+
+            doc.text('Unsafe', chartX + 10, chartY + 57);
+            doc.setFillColor(255, 82, 82);
+            doc.rect(chartX + 35, chartY + 53, unsafeBarW || 2, 5, 'F');
+
+            let tableX = M + 130, tableW = UW - 130;
+            doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 82, 82);
+            doc.text('Failed / Not Safe Findings', tableX, chartY + 10);
+
+            let failedItemsList = state.inspectionData.filter(i => !isItemSafe(i));
+            let ty = chartY + 16;
+
+            if (failedItemsList.length === 0) {
+                doc.setFontSize(9); doc.setFont('helvetica', 'italic'); doc.setTextColor(100, 100, 100);
+                doc.text('No failed or unsafe equipment recorded.', tableX, ty + 10);
+            } else {
+                doc.setFillColor(240, 240, 240); doc.rect(tableX, ty, tableW, 6, 'F');
+                doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 0, 0);
+                doc.text('Item', tableX + 2, ty + 4.5);
+                doc.text('Failed Question & Photo', tableX + 20, ty + 4.5);
+                ty += 6;
+
+                failedItemsList.forEach(item => {
+                    let failQ = null;
+                    if ((item.q3 || '').toLowerCase().includes('no')) failQ = questions[2];
+                    else if ((item.q4 || '').toLowerCase().includes('no')) failQ = questions[3];
+                    else failQ = questions[2];
+
+                    let qText = 'Item #' + item.itemNumber + ': ' + failQ.title;
+                    let photoArr = (item.photos && item.photos['q' + failQ.id]) || [];
+
+                    if (ty + 30 > LIMIT) return;
+
+                    doc.setDrawColor(200, 200, 200);
+                    doc.rect(tableX, ty, tableW, 28);
+                    doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+                    let splitQ = doc.splitTextToSize(qText, tableW - 35);
+                    doc.text(splitQ, tableX + 2, ty + 6);
+
+                    if (photoArr.length > 0) {
+                        try {
+                            doc.addImage(photoArr[0], 'JPEG', tableX + tableW - 32, ty + 2, 30, 24);
+                        } catch(e){}
+                    } else {
+                        doc.setFontSize(7); doc.setTextColor(150, 150, 150);
+                        doc.text('No photo', tableX + tableW - 25, ty + 15);
+                        doc.setTextColor(0, 0, 0);
+                    }
+                    ty += 30;
+                });
+            }
+
+            y = chartY + chartH + 15;
+            if (y > LIMIT - 40) { doc.addPage(); drawRunningHeader(); y = 30; }
+
+            doc.setDrawColor(0,0,0); doc.line(M, y, M + 70, y);
+            doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+            doc.text('Inspector Signature', M, y + 5);
+            if (sigData) { try { doc.addImage(sigData, 'PNG', M, y + 8, 50, 25); } catch(e){} }
+            y += 38;
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+            doc.text(state.setup.name + ' - ' + state.setup.role, M, y);
+            doc.text('Signed: ' + new Date().toLocaleString('en-GB'), M + 80, y);
+
+            var totalPages = doc.internal.getNumberOfPages();
+            for (var i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(150, 150, 150);
+                doc.text(branding.footerText || ((branding.title || 'PUWER Inspection') + ' - ' + state.setup.company + ' - ' + state.setup.project), PW / 2, PH - 8, { align: 'center' });
+                doc.text('Page ' + i + ' of ' + totalPages, PW - M, PH - 8, { align: 'right' });
+            }
+
+            var fileName = 'PUWER_' + (state.setup.project || 'Report').replace(/\s/g, '_') + '.pdf';
+            var pdfBlob = doc.output('blob');
+            lastGeneratedPdfBlob = pdfBlob;
+            var projectIds = getAuditProjectIds(state.setup.project || '');
+            var safeItems = state.inspectionData.filter(isItemSafe).length;
+            var auditId = 'puwer_' + Date.now();
+            var audit = {
+                id: auditId,
+                clientId: projectIds.clientId,
+                siteId: projectIds.siteId,
+                date: new Date().toISOString().slice(0, 10),
+                inspectorName: state.setup.name || '',
+                inspectorQuals: (state.setup.role || 'Inspector') + ' - PUWER',
+                inspectorNotes: 'Company: ' + (state.setup.company || 'N/A') + ' | Project: ' + (state.setup.project || 'N/A') + ' | Ref: ' + SESSION_REF,
+                auditorSignature: sigData,
+                siteRepName: '',
+                siteRepSignature: '',
+                score: state.inspectionData.length ? Math.round((safeItems / state.inspectionData.length) * 100) : 0,
+                status: safeItems === state.inspectionData.length ? 'Closed' : 'Action Required',
+                questions: state.inspectionData.map(function(item, index) {
+                    var safe = isItemSafe(item);
+                    var details = questions.map(function(question) {
+                        return question.title + ': ' + (item['q' + question.id] || 'Not answered');
+                    }).join(' | ');
+                    return {
+                        id: auditId + '_item_' + (index + 1),
+                        topic: 'Item ' + item.itemNumber + ' - ' + (item.q1 || 'Equipment'),
+                        baseTopic: 'PUWER equipment inspection',
+                        text: details,
+                        answer: safe ? 'Yes' : 'No',
+                        severity: !safe && String(item.q4 || '').toLowerCase().includes('no') ? 'Red' : 'Amber',
+                        type: 'Field Verification',
+                        complianceType: 'puwer',
+                        projectName: state.setup.project || '',
+                        itemNumber: item.itemNumber
+                    };
+                }),
+                pdfUrl: ''
+            };
+            doc.save(fileName);
+            await syncPuwerAudit(audit, pdfBlob, fileName);
+            addAppBubble('📄 Report generated and downloaded successfully!');
+        }
+
+        document.getElementById('setup-save').onclick = function() {
+            state.setup.company = document.getElementById('setup-company').value.trim();
+            state.setup.project = document.getElementById('setup-project').value.trim();
+            state.setup.number = document.getElementById('setup-number').value.trim();
+            state.setup.name = document.getElementById('setup-name').value.trim();
+            state.setup.role = document.getElementById('setup-role').value.trim();
+            if (!state.setup.project || !state.setup.name) { alert('Please fill in required fields.'); return; }
+            var logoFile = document.getElementById('setup-logo').files[0];
+            if (logoFile) {
+                var reader = new FileReader();
+                reader.onload = function(e) { state.setup.logo = e.target.result; saveSetup(); document.getElementById('setup-modal').style.display = 'none'; startBriefing(); };
+                reader.readAsDataURL(logoFile);
+            } else { saveSetup(); document.getElementById('setup-modal').style.display = 'none'; startBriefing(); }
+        };
+    </script>
+</body>
+</html>
