@@ -192,7 +192,9 @@
             <video id="camera-video" autoplay playsinline></video>
             <canvas id="camera-canvas" style="display:none;"></canvas>
             <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button id="cam-capture" style="flex:1; background: var(--wa-green-btn);">Capture</button>
+                <button id="cam-capture" style="flex:1; background: var(--wa-green-btn);">Take Photo</button>
+                <button id="cam-upload" type="button" class="secondary" style="flex:1;">Upload</button>
+                <input type="file" id="cam-file" accept="image/*" style="display:none;">
                 <button id="cam-cancel" class="danger" style="flex:1;">Cancel</button>
             </div>
         </div>
@@ -751,22 +753,46 @@
                 navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream) {
                     state.stream = stream; video.srcObject = stream;
                 }).catch(function(e) {
-                    camModal.style.display = 'none';
-                    promptForPhotoEvidence(); // FIX: Return to prompt on error
+                    alert('Camera unavailable. You can upload a photo from your device instead.');
                 });
-            } catch (e) { camModal.style.display = 'none'; promptForPhotoEvidence(); }
+            } catch (e) { alert('Camera unavailable. You can upload a photo from your device instead.'); }
         }
+
+        document.getElementById('cam-upload').onclick = function() { document.getElementById('cam-file').click(); };
+        document.getElementById('cam-file').onchange = function() {
+            var file = this.files && this.files[0];
+            this.value = '';
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var img = new Image();
+                img.onload = function() {
+                    var scale = Math.min(1, 960 / Math.max(img.width, img.height));
+                    canvas.width = Math.round(img.width * scale);
+                    canvas.height = Math.round(img.height * scale);
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    var q = questions[state.currentQuestionIndex];
+                    if (!state.currentPhotos['q' + q.id]) state.currentPhotos['q' + q.id] = [];
+                    state.currentPhotos['q' + q.id].push(canvas.toDataURL('image/jpeg', 0.6));
+                    stopCamera();
+                    promptForPhotoEvidence();
+                };
+                img.onerror = function() { alert('That file could not be read as an image.'); };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
 
         document.getElementById('cam-capture').onclick = function() {
             const sourceWidth = video.videoWidth || 640;
             const sourceHeight = video.videoHeight || 480;
-            const scale = Math.min(1, 1280 / Math.max(sourceWidth, sourceHeight));
+            const scale = Math.min(1, 960 / Math.max(sourceWidth, sourceHeight));
             canvas.width = Math.round(sourceWidth * scale);
             canvas.height = Math.round(sourceHeight * scale);
-            canvas.getContext('2d').drawImage(video, 0, 0);
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
             const q = questions[state.currentQuestionIndex];
             if (!state.currentPhotos['q' + q.id]) state.currentPhotos['q' + q.id] = [];
-            state.currentPhotos['q' + q.id].push(canvas.toDataURL('image/jpeg', 0.72));
+            state.currentPhotos['q' + q.id].push(canvas.toDataURL('image/jpeg', 0.6));
             stopCamera();
             promptForPhotoEvidence(); // FIX: Return to prompt to ask for more or skip
         };
@@ -813,13 +839,14 @@
             try {
                 await generatePDF(sigPad.toDataURL());
             } catch (error) {
-                alert('The report was downloaded, but could not be saved to Supabase: ' + error.message);
+                console.error('PUWER report failed:', error);
+                alert('PUWER report problem: ' + (error && error.message ? error.message : error));
             }
         };
 
         async function generatePDF(sigData) {
             var jsPDF = window.jspdf.jsPDF;
-            var doc = new jsPDF('landscape', 'mm', 'a4');
+            var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
             var PW = doc.internal.pageSize.getWidth();
             var PH = doc.internal.pageSize.getHeight();
             var M = 15, UW = PW - 2 * M;
@@ -842,11 +869,15 @@
                     } catch (e) {}
                 }
                 doc.setTextColor(branding.textColor || '#ffffff');
-                doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-                doc.text((branding.title || 'Company') + ' | PUWER INSPECTION REPORT', M + logoOffset, 9);
+                var rhW = PW - 2 * M - logoOffset;
+                var rhTitle = (branding.title || 'Company') + ' | PUWER INSPECTION REPORT';
+                var rhSize = 12;
+                doc.setFontSize(rhSize); doc.setFont('helvetica', 'bold');
+                while (rhSize > 8 && doc.getTextWidth(rhTitle) > rhW * 0.6) { rhSize -= 0.5; doc.setFontSize(rhSize); }
+                doc.text(rhTitle, M + logoOffset, 9);
                 doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-                doc.text((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), M + logoOffset, 16);
-                doc.text(state.setup.name + ' (' + state.setup.role + ')', PW - M, 9, { align: 'right' });
+                doc.text(doc.splitTextToSize((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), rhW * 0.6)[0], M + logoOffset, 16);
+                doc.text(doc.splitTextToSize((state.setup.name || '') + ' (' + (state.setup.role || '') + ')', rhW * 0.38)[0], PW - M, 9, { align: 'right' });
                 doc.text(new Date().toLocaleDateString('en-GB') + ' | Ref: ' + SESSION_REF, PW - M, 16, { align: 'right' });
             }
 
@@ -878,11 +909,15 @@
                 } catch (e) {}
             }
             doc.setTextColor(branding.textColor || '#ffffff');
-            doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-            doc.text((branding.title || 'Company') + ' | PUWER INSPECTION REPORT', M + logoOffset, 14);
+            var chW = PW - 2 * M - logoOffset;
+            var chTitle = (branding.title || 'Company') + ' | PUWER INSPECTION REPORT';
+            var chSize = 18;
+            doc.setFontSize(chSize); doc.setFont('helvetica', 'bold');
+            while (chSize > 10 && doc.getTextWidth(chTitle) > chW * 0.6) { chSize -= 0.5; doc.setFontSize(chSize); }
+            doc.text(chTitle, M + logoOffset, 14);
             doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-            doc.text((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), M + logoOffset, 22);
-            doc.text(state.setup.name + ' (' + state.setup.role + ')', PW - M, 14, { align: 'right' });
+            doc.text(doc.splitTextToSize((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), chW * 0.6)[0], M + logoOffset, 22);
+            doc.text(doc.splitTextToSize((state.setup.name || '') + ' (' + (state.setup.role || '') + ')', chW * 0.38)[0], PW - M, 14, { align: 'right' });
             doc.text(new Date().toLocaleDateString('en-GB') + ' | Ref: ' + SESSION_REF, PW - M, 22, { align: 'right' });
 
             y = 45;
@@ -916,9 +951,9 @@
             }
 
             function isItemSafe(item) {
-                let ans3 = (item.q3 || '').toLowerCase();
-                let ans4 = (item.q4 || '').toLowerCase();
-                if (ans3.includes('no') || ans4.includes('no')) return false;
+                let ans3 = (item.q3 || '').toLowerCase().trim();
+                let ans4 = (item.q4 || '').toLowerCase().trim();
+                if (ans3.startsWith('no') || ans4.startsWith('no')) return false;
                 return true;
             }
 
@@ -1061,8 +1096,8 @@
 
                 failedItemsList.forEach(item => {
                     let failQ = null;
-                    if ((item.q3 || '').toLowerCase().includes('no')) failQ = questions[2];
-                    else if ((item.q4 || '').toLowerCase().includes('no')) failQ = questions[3];
+                    if ((item.q3 || '').toLowerCase().trim().startsWith('no')) failQ = questions[2];
+                    else if ((item.q4 || '').toLowerCase().trim().startsWith('no')) failQ = questions[3];
                     else failQ = questions[2];
 
                     let qText = 'Item #' + item.itemNumber + ': ' + failQ.title;
@@ -1139,7 +1174,7 @@
                         baseTopic: 'PUWER equipment inspection',
                         text: details,
                         answer: safe ? 'Yes' : 'No',
-                        severity: !safe && String(item.q4 || '').toLowerCase().includes('no') ? 'Red' : 'Amber',
+                        severity: !safe && String(item.q4 || '').toLowerCase().trim().startsWith('no') ? 'Red' : 'Amber',
                         type: 'Field Verification',
                         complianceType: 'puwer',
                         projectName: state.setup.project || '',
