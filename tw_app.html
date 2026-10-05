@@ -579,19 +579,21 @@ function renderTWQuestion(q, index, active) {
     }
 
     if (active && !q.photo) {
-        const fileLabel = document.createElement('label');
-        fileLabel.className = 'tw-file-label';
-        fileLabel.textContent = 'Add Photo (required)';
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = 'image/*';
-        fileInput.capture = 'environment';
-        fileInput.addEventListener('change', function() { compressAndStorePhoto(index, this); });
-        fileLabel.appendChild(fileInput);
-        bubble.appendChild(fileLabel);
+        [['Take Photo (required)', true], ['Upload from Device', false]].forEach(([text, useCamera]) => {
+            const fileLabel = document.createElement('label');
+            fileLabel.className = 'tw-file-label';
+            fileLabel.textContent = text;
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            if (useCamera) fileInput.capture = 'environment';
+            fileInput.addEventListener('change', function() { compressAndStorePhoto(index, this); });
+            fileLabel.appendChild(fileInput);
+            bubble.appendChild(fileLabel);
+        });
         const requirement = document.createElement('p');
         requirement.className = 'mt-2 text-[11px] text-slate-500';
-        requirement.textContent = 'A photo is required before recording an answer.';
+        requirement.textContent = 'A photo is required before choosing Yes or No. Choose N/A instead if not applicable (a note is required).';
         bubble.appendChild(requirement);
     }
 
@@ -600,7 +602,7 @@ function renderTWQuestion(q, index, active) {
         answers.className = 'chat-actions';
         [['Yes', ''], ['No', 'danger'], ['N/A', 'secondary']].forEach(([answer, style]) => {
             const button = createChatAction(answer, () => attemptSetAnswer(index, answer), style);
-            button.disabled = !q.photo;
+            button.disabled = !q.photo && answer !== 'N/A';
             answers.appendChild(button);
         });
         bubble.appendChild(answers);
@@ -698,7 +700,7 @@ function renderQuestions() {
     const client = clients.find(item => String(item.id) === document.getElementById('selectClient').value);
     const site = sites.find(item => String(item.id) === document.getElementById('selectSite').value);
     addAppBubble(`Temporary Works inspection · ${site ? site.name : 'Site'} · ${document.getElementById('inputInspectorName').value.trim()}`);
-    addAppBubble('Complete each section in order. Add the required photo before choosing Yes, No, or N/A.');
+    addAppBubble('Complete each section in order. Add the required photo before choosing Yes or No. For N/A, add a note instead.');
 
     for (let index = 0; index < Math.min(activeQuestionIndex, questionsList.length); index++) {
         renderTWQuestion(questionsList[index], index, false);
@@ -763,13 +765,14 @@ function duplicateTopic(baseTopicStr, currentTopicStr, event) {
 
 function markTopicNA(topicStr, event) {
     if (event) { event.stopPropagation(); event.preventDefault(); }
-    if(!confirm(`Mark "${topicStr}" as Not Applicable?\n\nThis will bypass photo requirements for this category since the item is not present on site.`)) return;
+    const naNote = (prompt(`Mark "${topicStr}" as Not Applicable?\n\nA photo is not needed for N/A sections, but a note is required - explain why it does not apply:`) || '').trim();
+    if (!naNote) { alert('A note is required to mark a section as N/A.'); return; }
 
     questionsList.forEach(q => {
         if (q.topic === topicStr) {
             q.answer = 'N/A';
             q.photo = 'SKIP';
-            q.comment = 'Category marked N/A: Not present on site.';
+            q.comment = 'Section N/A: ' + naNote;
         }
     });
 
@@ -784,6 +787,15 @@ function updateSequentialLocks() {
 
 function attemptSetAnswer(idx, val) {
     if (idx !== activeQuestionIndex) return;
+    if (val === 'N/A') {
+        const note = (prompt('Mark this question as Not Applicable.\n\nA note is required - explain why it does not apply:') || '').trim();
+        if (!note) { alert('A note is required to mark a question as N/A.'); return; }
+        if (!questionsList[idx].photo) questionsList[idx].photo = 'SKIP';
+        questionsList[idx].comment = note;
+        questionsList[idx].answer = val;
+        renderQuestions();
+        return;
+    }
     if (!questionsList[idx].photo && questionsList[idx].photo !== 'SKIP') {
         alert("Rule Enforcement: A photo is mandatory for EVERY TW question before logging an answer. Please capture or upload a photo first.");
         return;
@@ -865,10 +877,30 @@ function generatePdfBlob(audit, c, s) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     const themeColor = branding.color || '#075E54';
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+
+    function drawPageHeader() {
+        doc.setFillColor(themeColor);
+        doc.rect(0, 0, pageW, 28, 'F');
+        const hasLogo = addImageToPdf(doc, branding.logoDataUrl || '', 12, 6, 28, 16);
+        const textX = hasLogo ? 44 : 12;
+        const maxW = pageW - 12 - textX;
+        doc.setTextColor(branding.textColor || '#ffffff');
+        let titleSize = 14;
+        doc.setFont('helvetica', 'bold');
+        const title = branding.title || 'Temporary Works Inspection UK';
+        doc.setFontSize(titleSize);
+        while (titleSize > 9 && doc.getTextWidth(title) > maxW) { titleSize -= 0.5; doc.setFontSize(titleSize); }
+        doc.text(title, textX, 11);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const info = doc.splitTextToSize(`Official Report | Project: ${c.name || 'N/A'} | Site: ${s.name || 'N/A'} | Date: ${audit.date}`, maxW).slice(0, 2);
+        doc.text(info, textX, 17);
+    }
 
     const tableRows = [];
     (audit.questions || []).forEach(q => {
-        if (q.photo === 'SKIP') return;
         let result = q.answer === 'Yes' ? 'Compliant' : (q.answer === 'No' ? 'Defect' : 'N/A');
         let urgency = q.answer === 'No' ? (q.severity === 'Red' ? 'PROHIBITION' : 'MINOR') : '-';
         let findings = q.comment || 'No comment';
@@ -879,12 +911,13 @@ function generatePdfBlob(audit, c, s) {
             result,
             urgency,
             findings,
-            q.photo ? { content: '', image: q.photo } : 'No Photo'
+            q.photo && q.photo !== 'SKIP' ? { content: '', image: q.photo } : 'No Photo'
         ]);
     });
 
     doc.autoTable({
-        startY: 65,
+        startY: 34,
+        margin: { top: 34, left: 12, right: 12, bottom: 18 },
         head: [['Temporary Works Category', 'Criteria Checked', 'Result', 'Urgency', 'TWS Observations', 'Evidence Photo']],
         body: tableRows,
         headStyles: { fillColor: themeColor, fontSize: 8, fontStyle: 'bold' },
@@ -913,30 +946,13 @@ function generatePdfBlob(audit, c, s) {
             }
         },
         // Adds professional corporate header banner to every page automatically
-        didDrawPage: function(data) {
-            doc.setFillColor(themeColor);
-            doc.rect(0, 0, 210, 26, 'F');
-            doc.setTextColor(branding.textColor || '#ffffff');
-            doc.setFontSize(14);
-            doc.setFont("helvetica", "bold");
-            const logoData = branding.logoDataUrl || '';
-            const hasLogo = addImageToPdf(doc, logoData, 12, 4, 28, 16);
-            doc.text(branding.title || 'Temporary Works Inspection UK', hasLogo ? 44 : 14, 12);
-            doc.setFontSize(8.5);
-            doc.setFont("helvetica", "normal");
-            doc.text(`Official Report | Project: ${c.name || 'N/A'} | Site: ${s.name || 'N/A'} | Date: ${audit.date}`, 14, 20);
-
-            // Footer on every page
-            doc.setFontSize(7);
-            doc.setTextColor(150, 150, 150);
-            doc.text(branding.footerText || "Official Temporary Works Inspection Certificate.", 14, 288);
-            doc.text(`Page ${doc.internal.getNumberOfPages()}`, 185, 288);
-        }
+        didDrawPage: drawPageHeader
     });
 
     // APPENDIX: Supervisor Summary & Signatures
     doc.addPage();
-    let yPos = 35;
+    drawPageHeader();
+    let yPos = 40;
     doc.setTextColor(40, 40, 40);
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
@@ -966,6 +982,14 @@ function generatePdfBlob(audit, c, s) {
     doc.text('Name: ' + (audit.inspectorName || 'N/A') + ' (' + (audit.inspectorQuals || 'N/A') + ')', 14, yPos);
     doc.text('Name: ' + (audit.siteRepName || 'N/A'), 110, yPos);
 
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(150, 150, 150);
+        doc.text(doc.splitTextToSize(branding.footerText || 'Official Temporary Works Inspection Certificate.', pageW - 60)[0], 12, pageH - 9);
+        doc.text(`Page ${i} of ${totalPages}`, pageW - 12, pageH - 9, { align: 'right' });
+    }
+
     return doc.output('blob');
 }
 
@@ -976,7 +1000,7 @@ async function uploadPdfToSupabase(audit, pdfBlob) {
     const uploadRequest = supabaseClient.storage
         .from('reports')
         .upload(filePath, pdfBlob, { contentType: 'application/pdf', upsert: true });
-    const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Supabase PDF upload timed out')), 6000));
+    const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Supabase PDF upload timed out')), 30000));
     const { error } = await Promise.race([uploadRequest, timeout]);
     if (error) throw error;
     const { data: urlData } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
@@ -1063,7 +1087,7 @@ async function submitInspection() {
         } catch(e) { console.warn("Local storage full, saving to cloud primary."); }
 
         if (supabaseClient) {
-            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase audit sync timed out')), 6000));
+            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase audit sync timed out')), 30000));
             const { error } = await Promise.race([supabaseClient.from('audits').insert([newAudit]), timeout]);
             if (error) throw error;
         }

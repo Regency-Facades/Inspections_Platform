@@ -288,8 +288,10 @@
             <video id="camera-video" autoplay playsinline></video>
             <canvas id="camera-canvas" style="display:none;"></canvas>
             <div style="margin-top: 15px;">
-                <button id="cam-capture" style="background: var(--wa-green-btn);">Capture</button>
-                <button id="cam-cancel" class="danger">Cancel</button>
+                <button id="cam-capture" style="background: var(--wa-green-btn);">Take Photo</button>
+                <button id="cam-upload" class="secondary" type="button">Upload from Device</button>
+                <input type="file" id="cam-file" accept="image/*" style="display:none;">
+                <button id="cam-cancel" class="danger">Skip / Cancel</button>
             </div>
         </div>
     </div>
@@ -1018,13 +1020,32 @@
                 navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream) {
                     state.stream = stream; video.srcObject = stream;
                 }).catch(function(e) {
-                    alert('Camera unavailable.');
-                    camModal.style.display = 'none';
-                    state.currentPhoto = null;
-                    askForTime();
+                    alert('Camera unavailable. You can upload a photo from your device instead.');
                 });
-            } catch (e) { camModal.style.display = 'none'; state.currentPhoto = null; askForTime(); }
+            } catch (e) { alert('Camera unavailable. You can upload a photo from your device instead.'); }
         }
+
+        document.getElementById('cam-upload').onclick = function() { document.getElementById('cam-file').click(); };
+        document.getElementById('cam-file').onchange = function() {
+            var file = this.files && this.files[0];
+            this.value = '';
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var img = new Image();
+                img.onload = function() {
+                    var scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+                    canvas.width = Math.round(img.width * scale);
+                    canvas.height = Math.round(img.height * scale);
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    state.currentPhoto = canvas.toDataURL('image/jpeg', 0.72);
+                    stopCamera(); askForTime();
+                };
+                img.onerror = function() { alert('That file could not be read as an image.'); };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
 
         document.getElementById('cam-capture').onclick = function() {
             const sourceWidth = video.videoWidth || 640;
@@ -1032,7 +1053,7 @@
             const scale = Math.min(1, 1280 / Math.max(sourceWidth, sourceHeight));
             canvas.width = Math.round(sourceWidth * scale);
             canvas.height = Math.round(sourceHeight * scale);
-            canvas.getContext('2d').drawImage(video, 0, 0);
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
             state.currentPhoto = canvas.toDataURL('image/jpeg', 0.72);
             stopCamera(); askForTime();
         };
@@ -1074,8 +1095,19 @@
             var pageHeight = doc.internal.pageSize.getHeight();
             var margin = 15;
 
+            function drawRunningHeader() {
+                doc.setFillColor(branding.color || '#075E54');
+                doc.rect(0, 0, pageWidth, 18, 'F');
+                doc.setTextColor(branding.textColor || '#ffffff');
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+                doc.text(doc.splitTextToSize((branding.title || 'Company') + ' | HAVS DAILY BRIEFING', pageWidth - 2 * margin)[0], margin, 8);
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+                doc.text(doc.splitTextToSize((state.setup.project || 'N/A') + ' | ' + new Date().toLocaleDateString('en-GB'), pageWidth - 2 * margin)[0], margin, 14);
+                doc.setTextColor(0, 0, 0);
+            }
+
             doc.setFillColor(branding.color || '#075E54');
-            doc.rect(0, 0, pageWidth, 35, 'F');
+            doc.rect(0, 0, pageWidth, 38, 'F');
 
             var logoOffset = 0;
             if (reportLogo()) {
@@ -1087,20 +1119,24 @@
                     var ratio = imgProps.width / imgProps.height;
                     var finalH = maxLogoHeight; var finalW = finalH * ratio;
                     if (finalW > maxLogoWidth) { finalW = maxLogoWidth; finalH = finalW / ratio; }
-                    doc.addImage(logoImage, logoFmt, margin, (35 - finalH) / 2, finalW, finalH);
+                    doc.addImage(logoImage, logoFmt, margin, (38 - finalH) / 2, finalW, finalH);
                     logoOffset = finalW + 10;
                 } catch (e) {}
             }
 
             doc.setTextColor(branding.textColor || '#ffffff');
-            doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-            doc.text((branding.title || 'Company') + ' | HAVS DAILY BRIEFING', margin + logoOffset, 14);
-            doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-            doc.text((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), margin + logoOffset, 22);
-            doc.text(state.setup.name + ' (' + state.setup.role + ')', pageWidth - margin, 14, { align: 'right' });
-            doc.text(new Date().toLocaleDateString('en-GB'), pageWidth - margin, 22, { align: 'right' });
+            var headerTextW = pageWidth - 2 * margin - logoOffset;
+            var headerTitle = (branding.title || 'Company') + ' | HAVS DAILY BRIEFING';
+            var titleSize = 16;
+            doc.setFontSize(titleSize); doc.setFont('helvetica', 'bold');
+            while (titleSize > 9 && doc.getTextWidth(headerTitle) > headerTextW) { titleSize -= 0.5; doc.setFontSize(titleSize); }
+            doc.text(headerTitle, margin + logoOffset, 12);
+            doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
+            doc.text(doc.splitTextToSize((branding.subtitle ? branding.subtitle + ' | ' : '') + (state.setup.company || 'N/A') + ' | PROJECT: ' + (state.setup.project || 'N/A') + ' | No: ' + (state.setup.number || 'N/A'), headerTextW).slice(0, 2), margin + logoOffset, 19);
+            doc.text(doc.splitTextToSize((state.setup.name || '') + ' (' + (state.setup.role || '') + ')', headerTextW - 40)[0], margin + logoOffset, 32);
+            doc.text(new Date().toLocaleDateString('en-GB'), pageWidth - margin, 32, { align: 'right' });
 
-            var y = 45;
+            var y = 48;
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(14); doc.setFont('helvetica', 'bold');
             doc.text('Operative Details', margin, y); y += 8;
@@ -1126,6 +1162,7 @@
             y += 5;
 
             state.currentOperative.tools.forEach(function(t) {
+                if (y > pageHeight - 25) { doc.addPage(); drawRunningHeader(); y = 28; }
                 var eavHours = 8 * Math.pow(2.5 / t.vibration, 2);
                 var eavH = Math.floor(eavHours); var eavM = Math.floor((eavHours - eavH) * 60);
                 var elvHours = 8 * Math.pow(5.0 / t.vibration, 2);
@@ -1153,12 +1190,12 @@
             });
             y += 5;
 
-            if (y > pageHeight - 60) { doc.addPage(); y = 20; }
+            if (y > pageHeight - 60) { doc.addPage(); drawRunningHeader(); y = 28; }
             doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 0, 0);
             doc.text('Tool Evidence', margin, y); y += 8;
 
             state.currentOperative.tools.forEach(function(t) {
-                if (y > pageHeight - 40) { doc.addPage(); y = 20; }
+                if (y > pageHeight - 40) { doc.addPage(); drawRunningHeader(); y = 28; }
                 doc.setFontSize(9); doc.setFont('helvetica', 'bold');
                 doc.text(t.brand + ' ' + t.model, margin, y + 4);
                 doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
@@ -1168,7 +1205,7 @@
                 y += 38;
             });
 
-            if (y > pageHeight - 50) { doc.addPage(); y = 20; }
+            if (y > pageHeight - 50) { doc.addPage(); drawRunningHeader(); y = 28; }
             y += 5;
             doc.setDrawColor(0, 0, 0); doc.line(margin, y, margin + 70, y);
             doc.setFontSize(9); doc.setFont('helvetica', 'bold');
