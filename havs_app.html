@@ -489,19 +489,24 @@
                 if (cloudRequired) throw new Error('Supabase is unavailable. Check your connection and reload the app.');
                 return;
             }
-            let syncStage = 'PDF upload';
+            let syncStage = 'audit record save';
             try {
-                audit.pdfUrl = await uploadHavsPdf(audit, pdfBlob, fileName) || '';
-                if (!audit.pdfUrl) throw new Error('Supabase uploaded the HAVS PDF but did not return its public URL.');
-                saveHavsAuditLocally(audit);
-                syncStage = 'audit record save';
-                const insertRequest = supabaseClient.from('audits').insert([audit]);
+                const insertRequest = supabaseClient.from('audits').upsert([audit], { onConflict: 'id' });
                 const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Audit sync timed out after 30 seconds')), 30000));
                 const { error } = await Promise.race([insertRequest, timeout]);
                 if (error) throw error;
+
+                syncStage = 'PDF upload';
+                audit.pdfUrl = await uploadHavsPdf(audit, pdfBlob, fileName) || '';
+                if (!audit.pdfUrl) throw new Error('Supabase uploaded the HAVS PDF but did not return its public URL.');
+                saveHavsAuditLocally(audit);
+
+                syncStage = 'PDF link save';
+                const { error: linkError } = await supabaseClient.from('audits').update({ pdfUrl: audit.pdfUrl }).eq('id', audit.id);
+                if (linkError) throw linkError;
                 setCloudStatus('Audit and PDF synced');
             } catch (error) {
-                if (syncStage === 'PDF upload') {
+                if (syncStage !== 'audit record save') {
                     lastFailedHavsUpload = {
                         audit,
                         pdfBlob,

@@ -151,6 +151,7 @@
         </div>
         <div class="header-actions">
             <a id="supervisor-portal-link" class="portal-link" href="supervisor.html" aria-label="Return to Supervisor Portal"><span aria-hidden="true">&larr;</span><span>Portal</span></a>
+            <button id="supabase-retry-upload" class="secondary" type="button" hidden>Retry failed PDF upload</button>
         </div>
     </header>
 
@@ -253,6 +254,7 @@
             return branding.logoDataUrl || state.setup.logo || '';
         }
         let lastGeneratedPdfBlob = null;
+        let lastFailedPuwerUpload = null;
 
         function setCloudStatus(message) {
             const status = document.getElementById('cloud-status');
@@ -352,24 +354,57 @@
                 if (cloudRequired) throw new Error('Supabase is unavailable. Check your connection and reload the app.');
                 return;
             }
-            let syncStage = 'PDF upload';
+            let syncStage = 'audit record save';
             try {
-                audit.pdfUrl = await uploadPuwerPdf(audit, pdfBlob, fileName) || '';
-                if (!audit.pdfUrl) throw new Error('Supabase uploaded the PUWER PDF but did not return its public URL.');
-                savePuwerAuditLocally(audit);
-                syncStage = 'audit record save';
-                const insertRequest = supabaseClient.from('audits').insert([audit]);
+                const insertRequest = supabaseClient.from('audits').upsert([audit], { onConflict: 'id' });
                 const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Audit sync timed out after 30 seconds')), 30000));
                 const { error } = await Promise.race([insertRequest, timeout]);
                 if (error) throw error;
+
+                syncStage = 'PDF upload';
+                audit.pdfUrl = await uploadPuwerPdf(audit, pdfBlob, fileName) || '';
+                if (!audit.pdfUrl) throw new Error('Supabase uploaded the PUWER PDF but did not return its public URL.');
+                savePuwerAuditLocally(audit);
+
+                syncStage = 'PDF link save';
+                const { error: linkError } = await supabaseClient.from('audits').update({ pdfUrl: audit.pdfUrl }).eq('id', audit.id);
+                if (linkError) throw linkError;
                 setCloudStatus('Audit and PDF synced');
             } catch (error) {
+                if (syncStage !== 'audit record save') {
+                    lastFailedPuwerUpload = { audit, pdfBlob, fileName };
+                    document.getElementById('supabase-retry-upload').hidden = false;
+                }
                 const message = getCloudErrorMessage(error);
                 console.error('PUWER Supabase ' + syncStage + ' failed:', error);
                 setCloudStatus('Supabase ' + syncStage + ' failed');
                 throw new Error(syncStage + ' failed: ' + message);
             }
         }
+
+        async function retryPuwerPdfUpload() {
+            if (!lastFailedPuwerUpload || !supabaseClient) {
+                setCloudStatus('Supabase is unavailable. Check your connection and reload the app.');
+                return;
+            }
+            const pending = lastFailedPuwerUpload;
+            setCloudStatus('Retrying the full PUWER report PDF upload...');
+            try {
+                const pdfUrl = await uploadPuwerPdf(pending.audit, pending.pdfBlob, pending.fileName);
+                if (!pdfUrl) throw new Error('Supabase did not return the uploaded PDF URL.');
+                const { error } = await supabaseClient.from('audits').update({ pdfUrl }).eq('id', pending.audit.id);
+                if (error) throw error;
+                pending.audit.pdfUrl = pdfUrl;
+                savePuwerAuditLocally(pending.audit);
+                lastFailedPuwerUpload = null;
+                document.getElementById('supabase-retry-upload').hidden = true;
+                setCloudStatus('PUWER report and PDF synced');
+            } catch (error) {
+                setCloudStatus('PUWER PDF retry failed: ' + getCloudErrorMessage(error));
+            }
+        }
+
+        document.getElementById('supabase-retry-upload').addEventListener('click', retryPuwerPdfUpload);
 
         const questions = [
             {
