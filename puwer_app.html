@@ -987,6 +987,7 @@
 
             let failedItemsList = state.inspectionData.filter(i => !isItemSafe(i));
             let ty = chartY + 16;
+            let failedItemsContinued = false;
 
             if (failedItemsList.length === 0) {
                 doc.setFontSize(9); doc.setFont('helvetica', 'italic'); doc.setTextColor(100, 100, 100);
@@ -1007,7 +1008,19 @@
                     let qText = 'Item #' + item.itemNumber + ': ' + failQ.title;
                     let photoArr = (item.photos && item.photos['q' + failQ.id]) || [];
 
-                    if (ty + 30 > LIMIT) return;
+                    if (ty + 30 > LIMIT) {
+                        failedItemsContinued = true;
+                        doc.addPage();
+                        drawRunningHeader();
+                        doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 82, 82);
+                        doc.text('Failed / Not Safe Findings (continued)', tableX, 31);
+                        ty = 37;
+                        doc.setFillColor(240, 240, 240); doc.rect(tableX, ty, tableW, 6, 'F');
+                        doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 0, 0);
+                        doc.text('Item', tableX + 2, ty + 4.5);
+                        doc.text('Failed Question & Photo', tableX + 20, ty + 4.5);
+                        ty += 6;
+                    }
 
                     doc.setDrawColor(200, 200, 200);
                     doc.rect(tableX, ty, tableW, 28);
@@ -1029,7 +1042,7 @@
             }
 
             y = chartY + chartH + 15;
-            if (y > LIMIT - 40) { doc.addPage(); drawRunningHeader(); y = 30; }
+            if (failedItemsContinued || y > LIMIT - 40) { doc.addPage(); drawRunningHeader(); y = 30; }
 
             doc.setDrawColor(0,0,0); doc.line(M, y, M + 70, y);
             doc.setFontSize(9); doc.setFont('helvetica', 'bold');

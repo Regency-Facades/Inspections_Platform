@@ -940,6 +940,18 @@ async function uploadPdfToSupabase(audit, pdfBlob) {
     return urlData.publicUrl;
 }
 
+function downloadPdfBlob(pdfBlob, fileName) {
+    const url = URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 async function submitInspection() {
     const btn = document.getElementById('submitBtn');
     const originalText = btn.innerHTML;
@@ -1005,18 +1017,24 @@ async function submitInspection() {
 
         // Generate PDF Blob
         const pdfBlob = generatePdfBlob(newAudit, clientObj, siteObj);
-
-        // Upload the report before recording a successful cloud-linked inspection.
-        if (supabaseClient) {
-            const pdfUrl = await uploadPdfToSupabase(newAudit, pdfBlob);
-            newAudit.pdfUrl = pdfUrl;
-        }
+        const fileName = `TW_Report_${newAudit.id}_${newAudit.date}.pdf`;
+        downloadPdfBlob(pdfBlob, fileName);
 
         let existing = JSON.parse(localStorage.getItem('tw_audits')) || [];
         existing.push(newAudit);
         try {
             localStorage.setItem('tw_audits', JSON.stringify(existing));
         } catch(e) { console.warn("Local storage full, saving to cloud primary."); }
+
+        // Upload the report before recording a successful cloud-linked inspection.
+        if (supabaseClient) {
+            const pdfUrl = await uploadPdfToSupabase(newAudit, pdfBlob);
+            newAudit.pdfUrl = pdfUrl;
+            const recordIndex = existing.findIndex(audit => audit.id === newAudit.id);
+            if (recordIndex >= 0) existing[recordIndex] = newAudit;
+            try { localStorage.setItem('tw_audits', JSON.stringify(existing)); }
+            catch(e) { console.warn("Local storage full, saving to cloud primary."); }
+        }
 
         if (supabaseClient) {
             const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase audit sync timed out')), 30000));

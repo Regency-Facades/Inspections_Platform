@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Temporary Works UK - TWC Office Dashboard</title>
+<title>Regency Facades - Inspections Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -601,8 +601,6 @@ const actions = document.createElement('td');
 actions.className = 'p-3 text-right whitespace-nowrap';
 [
 ['Edit', 'edit-3', () => openComplianceEdit(type, record.id), 'bg-slate-800 hover:bg-slate-700 text-white'],
-['Email', 'mail', () => emailComplianceReport(type, record.id), 'bg-amber-700 hover:bg-amber-600 text-white'],
-['Summary PDF', 'download', () => downloadComplianceReport(type, record.id), 'bg-white border border-slate-300 hover:bg-slate-50 text-slate-700'],
 ['Delete', 'trash-2', () => deleteComplianceRecord(type, record.id), 'bg-red-50 hover:bg-red-100 text-red-700']
 ].forEach(([label, icon, action, style]) => {
 const button = document.createElement('button');
@@ -622,8 +620,13 @@ uploadedPdf.rel = 'noopener';
 uploadedPdf.className = 'inline-flex items-center gap-1 px-2 py-1.5 rounded-lg font-bold text-xs mr-1 bg-blue-600 hover:bg-blue-500 text-white';
 uploadedPdf.title = 'Open the full uploaded field report';
 uploadedPdf.setAttribute('aria-label', 'Open uploaded field report PDF');
-uploadedPdf.innerHTML = '<i data-lucide="file-text" class="w-3.5 h-3.5"></i><span>Uploaded PDF</span>';
+uploadedPdf.innerHTML = '<i data-lucide="file-text" class="w-3.5 h-3.5"></i><span>Full PDF</span>';
 actions.appendChild(uploadedPdf);
+} else {
+const missingPdf = document.createElement('span');
+missingPdf.className = 'mr-1 inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-bold text-amber-800';
+missingPdf.textContent = 'Full PDF unavailable';
+actions.appendChild(missingPdf);
 }
 row.appendChild(actions);
 tbody.appendChild(row);
@@ -711,77 +714,6 @@ persistComplianceRecords(type, getComplianceRecords(type).map(item => String(ite
 closeComplianceEdit();
 renderComplianceRecords(type);
 renderDashboard();
-}
-
-function buildCompliancePdf(type, record) {
-const { jsPDF } = window.jspdf;
-const doc = new jsPDF();
-const title = type.toUpperCase() + ' Compliance Report';
-const location = complianceLocation(record) || 'Site not recorded';
-doc.setFillColor(branding.color || '#075E54');
-doc.rect(0, 0, 210, 27, 'F');
-doc.setTextColor(branding.textColor || '#ffffff');
-doc.setFontSize(16);
-let titleX = 14;
-if (branding.logoDataUrl && addImageToPdf(doc, branding.logoDataUrl, 12, 4, 28, 18)) titleX = 44;
-doc.text((branding.title ? branding.title + ' | ' : '') + title, titleX, 17);
-doc.setTextColor(40, 40, 40);
-doc.setFontSize(10);
-doc.text('Site / Project: ' + location, 14, 38);
-doc.text('Date: ' + complianceValue(record, ['date', 'inspectionDate', 'createdAt'], 'Not recorded'), 14, 45);
-doc.text('Inspector: ' + complianceValue(record, ['inspectorName', 'inspector', 'assessor'], 'Not recorded'), 14, 52);
-doc.text('Outcome: ' + complianceValue(record, ['status', 'result', 'condition', 'riskLevel', 'rating', 'outcome'], 'Recorded'), 14, 59);
-doc.text('Score: ' + complianceValue(record, ['score', 'overallScore'], 'Not recorded'), 14, 66);
-const questions = Array.isArray(record.questions) ? record.questions : [];
-const rows = questions.map((question, index) => [
-String(question.topic || question.title || question.name || question.category || 'Item ' + (index + 1)),
-String(question.answer || question.status || question.result || ''),
-String(question.text || question.details || question.comment || question.inspectorNotes || JSON.stringify(question))
-]);
-doc.autoTable({ startY: 74, head: [['Inspection item', 'Outcome', 'Details']], body: rows.length ? rows : [['Report details', '', record.inspectorNotes || 'No inspection details recorded']], styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' }, headStyles: { fillColor: branding.color || '#075E54' }, columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 30 }, 2: { cellWidth: 110 } } });
-if (record.inspectorNotes) {
-doc.addPage();
-doc.setFontSize(12);
-doc.text('Report notes', 14, 18);
-doc.setFontSize(9);
-doc.text(doc.splitTextToSize(String(record.inspectorNotes), 180), 14, 26);
-}
-for (let page = 1; page <= doc.internal.getNumberOfPages(); page++) {
-doc.setPage(page);
-doc.setFontSize(7);
-doc.setTextColor(120, 120, 120);
-doc.text(branding.footerText || (branding.title || 'Compliance Report'), 14, 288);
-}
-return doc;
-}
-
-function complianceReportFilename(type, record) {
-const location = (complianceLocation(record) || type).replace(/[^a-z0-9_-]+/gi, '_');
-const date = String(complianceValue(record, ['date', 'inspectionDate'], 'report')).replace(/[^a-z0-9_-]+/gi, '_');
-return type.toUpperCase() + '_Report_' + location + '_' + date + '.pdf';
-}
-
-function downloadComplianceReport(type, id) {
-const record = findComplianceRecord(type, id);
-if (!record) return;
-buildCompliancePdf(type, record).save(complianceReportFilename(type, record));
-}
-
-async function emailComplianceReport(type, id) {
-const record = findComplianceRecord(type, id);
-if (!record) return;
-const doc = buildCompliancePdf(type, record);
-const pdfFile = new File([doc.output('blob')], complianceReportFilename(type, record), { type: 'application/pdf' });
-const location = complianceLocation(record) || type.toUpperCase() + ' report';
-const subject = type.toUpperCase() + ' report - ' + location;
-const body = 'Please find the ' + type.toUpperCase() + ' compliance report for ' + location + ', dated ' + complianceValue(record, ['date', 'inspectionDate'], 'not recorded') + '.';
-if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-try { await navigator.share({ title: subject, text: body, files: [pdfFile] }); return; }
-catch (error) { if (error.name === 'AbortError') return; }
-}
-doc.save(complianceReportFilename(type, record));
-const client = clients.find(item => String(item.id) === String(record.clientId)) || {};
-setTimeout(() => { window.location.href = 'mailto:' + encodeURIComponent(client.email || '') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body); }, 400);
 }
 
 async function deleteComplianceRecord(type, id) {
@@ -1168,10 +1100,9 @@ tbody.innerHTML += '<tr class="hover:bg-slate-50 border-b border-slate-100">' +
 '<td class="p-3"><span class="font-bold text-sm ' + (a.score >= 80 ? 'text-emerald-700' : 'text-amber-700') + '">' + a.score + '%</span></td>' +
 '<td class="p-3"><span class="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ' + (isClosed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200') + '">' + (isClosed ? 'Closed' : 'Open') + '</span></td>' +
 '<td class="p-3 text-right whitespace-nowrap">' +
-(a.pdfUrl ? '<a href="' + a.pdfUrl + '" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition mr-1 inline-flex items-center gap-1">Cloud PDF</a>' : '') +
+(a.pdfUrl ? '<a href="' + a.pdfUrl + '" target="_blank" rel="noopener" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition mr-1 inline-flex items-center gap-1">Full PDF</a>' : '<span class="mr-1 text-xs font-bold text-amber-700">Full PDF unavailable</span>') +
 '<button onclick="openInspectModal(\'' + a.id + '\')" class="bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition mr-1">Review & Close</button>' +
 '<button onclick="emailAuditReport(\'' + a.id + '\')" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition mr-1">Email</button>' +
-'<button onclick="downloadPDF(\'' + a.id + '\')" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition mr-1">PDF</button>' +
 '<button onclick="deleteAudit(\'' + a.id + '\')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg font-bold text-xs transition">Delete</button>' +
 '</td></tr>';
 });
@@ -1406,14 +1337,6 @@ catch (err) { if (err.name !== 'AbortError') console.warn(err); }
 
 doc.save(fileName);
 setTimeout(() => window.location.href = `mailto:${c.email || ''}?subject=${encodeURIComponent('TW Report - ' + s.name)}&body=${encodeURIComponent(shareText)}`, 500);
-}
-
-function downloadPDF(auditId) {
-const audit = audits.find(a => a.id === auditId);
-if (!audit) return;
-const c = clients.find(x => x.id === audit.clientId) || { name: 'Unknown', rep: 'Rep' };
-const s = sites.find(x => x.id === audit.siteId) || { name: 'Unknown' };
-buildCompletePdfDocument(audit, c, s).save('TW_Report_' + s.name.replace(/\s+/g, '_') + '_' + audit.date + '.pdf');
 }
 
 async function deleteAudit(auditId) {
