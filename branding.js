@@ -1,4 +1,9 @@
 (function(global) {
+    global.SharedSupabase = Object.freeze({
+        url: 'https://akgnwipwauwdvmfpfttv.supabase.co',
+        anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrZ253aXB3YXV3ZHZtZnBmdHR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMzI5MDYsImV4cCI6MjEwNjcwODkwNn0.As2LL92UeHKRlVU7QQWj0xDzH92bJ3Doc6y6Gz8JE5k'
+    });
+
     const STORAGE_KEY = 'tw_branding';
     const DEFAULT_BRANDING = {
         title: 'Temporary Works UK',

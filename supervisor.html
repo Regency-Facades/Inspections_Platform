@@ -44,9 +44,6 @@
           <span class="h-2 w-2 rounded-full bg-[#c9df65]"></span>
           Site compliance
         </div>
-        <button id="supabaseSettingsButton" type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-white/25 bg-white/10 text-white hover:bg-white/20" aria-label="Supabase connection settings" title="Supabase connection settings">
-          <i data-lucide="settings-2" class="h-4 w-4" aria-hidden="true"></i>
-        </button>
       </div>
     </div>
   </header>
@@ -59,20 +56,6 @@
     </div>
 
     <p id="linkStatus" class="mb-4 hidden rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800" role="alert"></p>
-    <form id="supabaseSetupForm" class="mb-5 hidden space-y-3 rounded-lg border border-[#cfd6d1] bg-white p-4 shadow-sm" novalidate>
-      <div>
-        <h2 class="text-sm font-bold text-[#263c36]">Supabase cloud connection</h2>
-        <p class="mt-1 text-xs leading-5 text-slate-600">Connect this device once. All three inspection apps use these shared settings to upload PDF reports and inspection records.</p>
-      </div>
-      <label class="block text-xs font-semibold text-slate-700" for="supabaseProjectUrl">Supabase project URL
-        <input id="supabaseProjectUrl" type="url" required autocomplete="url" placeholder="https://your-project.supabase.co" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal" />
-      </label>
-      <label class="block text-xs font-semibold text-slate-700" for="supabaseAnonKey">Supabase anon key
-        <input id="supabaseAnonKey" type="password" required autocomplete="off" placeholder="Paste the Supabase anon/public key" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal" />
-      </label>
-      <p id="supabaseConnectionStatus" class="text-xs font-semibold text-slate-600" role="status"></p>
-      <button type="submit" class="rounded-md bg-[#075E54] px-4 py-2 text-sm font-semibold text-white">Verify and save connection</button>
-    </form>
     <nav id="inspectionLinks" class="hidden space-y-3" aria-label="Inspection applications">
       <a id="temporaryWorksLink" class="launch-link group flex min-h-[82px] items-center gap-4 rounded-xl border border-[#d8ded9] bg-white px-4 py-4 shadow-sm sm:px-5" href="tw_app.html">
         <span class="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[#e7f0eb] text-[#075E54]" aria-hidden="true"><i data-lucide="construction" class="h-6 w-6"></i></span>
@@ -132,8 +115,8 @@
       let projectName = (params.get('project') || '').trim();
       const token = params.get('token');
       const requiresCloud = params.get('cloud') === '1';
-      const dbUrl = localStorage.getItem('tw_supa_url') || '';
-      const dbKey = localStorage.getItem('tw_supa_key') || '';
+      const dbUrl = SharedSupabase.url;
+      const dbKey = SharedSupabase.anonKey;
       let brandingClient = null;
       if (dbUrl && dbKey && window.supabase) {
         try { brandingClient = window.supabase.createClient(dbUrl, dbKey); } catch (error) {}
@@ -141,11 +124,6 @@
 
       if (!token && (supervisorName || projectName)) {
         showLinkError('This supervisor link is missing its access token. Generate a new link from the officer dashboard.');
-        return;
-      }
-
-      if ((!token || requiresCloud) && (!dbUrl || !dbKey)) {
-        showSupabaseSetup();
         return;
       }
 
@@ -159,8 +137,7 @@
           const { error } = await client.from('clients').select('id').limit(1);
           if (error) throw error;
         } catch (error) {
-          showLinkError('The Supabase connection could not be verified. Check the URL, anon key, and project access.');
-          showSupabaseSetup();
+          showLinkError('The Supabase connection could not be verified. Check your network and project access.');
           return;
         }
       }
@@ -173,16 +150,12 @@
             if (error || !data) throw new Error('This supervisor link is invalid or has been revoked.');
             supervisorName = data.supervisor_name;
             projectName = data.project;
-            localStorage.setItem('tw_supa_url', dbUrl);
-            localStorage.setItem('tw_supa_key', dbKey);
           } catch (error) {
             showLinkError(error.message || 'This supervisor link could not be verified.');
-            if (requiresCloud) showSupabaseSetup();
             return;
           }
         } else if (requiresCloud) {
           showLinkError('The Supabase client could not be loaded. Check your connection and reload this page.');
-          showSupabaseSetup();
           return;
         } else {
           let links = [];
@@ -197,11 +170,7 @@
         }
       }
 
-      if (dbUrl && dbKey && window.supabase) {
-        document.getElementById('supabaseConnectionStatus').textContent = 'Connected. This device will use Supabase for inspection reports.';
-      }
       await applySharedBranding(brandingClient);
-      document.getElementById('supabaseSetupForm').classList.add('hidden');
       document.getElementById('welcomeHeading').textContent = `Welcome, ${supervisorName || 'Supervisor'}`;
       document.getElementById('projectName').textContent = projectName || 'Project not specified';
       const context = new URLSearchParams(params);
@@ -218,13 +187,6 @@
       lucide.createIcons();
     }
 
-    function showSupabaseSetup() {
-      document.getElementById('supabaseProjectUrl').value = localStorage.getItem('tw_supa_url') || '';
-      document.getElementById('supabaseAnonKey').value = localStorage.getItem('tw_supa_key') || '';
-      document.getElementById('supabaseConnectionStatus').textContent = 'Connection has not been verified on this device.';
-      document.getElementById('supabaseSetupForm').classList.remove('hidden');
-    }
-
     function showLinkError(message) {
       const status = document.getElementById('linkStatus');
       status.textContent = message;
@@ -233,43 +195,6 @@
       document.getElementById('projectName').textContent = '';
     }
 
-    document.getElementById('supabaseSetupForm').addEventListener('submit', async event => {
-      event.preventDefault();
-      const dbUrl = document.getElementById('supabaseProjectUrl').value.trim();
-      const dbKey = document.getElementById('supabaseAnonKey').value.trim();
-      const status = document.getElementById('supabaseConnectionStatus');
-      if (!dbUrl || !dbKey) {
-        status.textContent = 'Enter both the Supabase project URL and anon key.';
-        return;
-      }
-      if (!window.supabase) {
-        status.textContent = 'Supabase client could not be loaded. Check your connection and reload this page.';
-        return;
-      }
-      status.textContent = 'Verifying Supabase connection…';
-      try {
-        const client = window.supabase.createClient(dbUrl, dbKey);
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get('token');
-        const { data, error } = token && params.get('cloud') === '1'
-          ? await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle()
-          : await client.from('clients').select('id').limit(1);
-        if (error) throw error;
-        if (token && params.get('cloud') === '1' && !data) {
-          throw new Error('This supervisor link is invalid or has been revoked.');
-        }
-      } catch (error) {
-        status.textContent = `Could not connect: ${error.message || 'check the URL, anon key, and Supabase access policies.'}`;
-        return;
-      }
-      localStorage.setItem('tw_supa_url', dbUrl);
-      localStorage.setItem('tw_supa_key', dbKey);
-      status.textContent = 'Connected. This device will use Supabase for inspection reports.';
-      document.getElementById('linkStatus').classList.add('hidden');
-      await initializeSupervisorPortal();
-    });
-
-    document.getElementById('supabaseSettingsButton').addEventListener('click', showSupabaseSetup);
     initializeSupervisorPortal();
   </script>
 </body>

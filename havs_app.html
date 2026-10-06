@@ -251,7 +251,7 @@
         </div>
         <div class="header-actions">
             <a id="supervisor-portal-link" class="portal-link" href="supervisor.html" aria-label="Return to Supervisor Portal"><span aria-hidden="true">&larr;</span><span>Portal</span></a>
-            <button class="settings-btn" id="supabase-settings-button" type="button" aria-label="Supabase connection settings" title="Supabase connection settings">&#9881;</button>
+            <button id="supabase-retry-upload" class="secondary" type="button" hidden>Retry failed PDF upload</button>
         </div>
     </header>
     <div id="chat-container"></div>
@@ -307,21 +307,6 @@
         </div>
     </div>
 
-    <div id="supabase-modal" class="modal">
-        <form id="supabase-form" class="modal-content" novalidate>
-            <h3>Supabase Connection</h3>
-            <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">Credentials stay on this device and are only shown here when you open this dialog.</p>
-            <label class="form-label" for="supabase-url">Project URL</label>
-            <input type="url" id="supabase-url" autocomplete="url" required>
-            <label class="form-label" for="supabase-key">Anon key</label>
-            <input type="password" id="supabase-key" autocomplete="off" required>
-            <p id="supabase-connection-status" class="connection-error" role="status" aria-live="polite"></p>
-            <button type="button" id="supabase-test-storage" class="secondary">Test Storage</button>
-            <button type="submit">Connect</button>
-            <button type="button" id="supabase-cancel" class="secondary">Cancel</button>
-        </form>
-    </div>
-
     <script>
         let TOOL_DB = [];
         let searchCounter = 0;
@@ -335,8 +320,8 @@
             stream: null
         };
 
-        let SUPABASE_URL = localStorage.getItem('tw_supa_url') || '';
-        let SUPABASE_ANON_KEY = localStorage.getItem('tw_supa_key') || '';
+        let SUPABASE_URL = SharedSupabase.url;
+        let SUPABASE_ANON_KEY = SharedSupabase.anonKey;
         let supabaseClient = null;
         let cloudRequired = false;
         let branding = SharedBranding.readLocal();
@@ -380,63 +365,19 @@
             }
         }
 
-        function openSupabaseSettings() {
-            document.getElementById('supabase-url').value = SUPABASE_URL;
-            document.getElementById('supabase-key').value = SUPABASE_ANON_KEY;
-            document.getElementById('supabase-connection-status').textContent = '';
-            document.getElementById('supabase-test-storage').textContent = lastFailedHavsUpload ? 'Retry failed PDF upload' : 'Test Storage';
-            document.getElementById('supabase-modal').style.display = 'flex';
-        }
-
-        async function connectSupabase(event) {
-            event.preventDefault();
-            const dbUrl = document.getElementById('supabase-url').value.trim();
-            const dbKey = document.getElementById('supabase-key').value.trim();
-            const status = document.getElementById('supabase-connection-status');
-            status.textContent = 'Checking connection...';
-            try {
-                const client = window.supabase.createClient(dbUrl, dbKey);
-                const params = new URLSearchParams(window.location.search);
-                const token = params.get('token');
-                if (cloudRequired && token) {
-                    const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
-                    if (error) throw error;
-                    if (!data) throw new Error('This supervisor link is not active in the selected Supabase project.');
-                } else {
-                    const { error } = await client.from('clients').select('id').limit(1);
-                    if (error) throw error;
-                }
-                localStorage.setItem('tw_supa_url', dbUrl);
-                localStorage.setItem('tw_supa_key', dbKey);
-                SUPABASE_URL = dbUrl;
-                SUPABASE_ANON_KEY = dbKey;
-                supabaseClient = client;
-                setCloudStatus('Cloud sync ready');
-                document.getElementById('supabase-modal').style.display = 'none';
-            } catch (error) {
-                status.textContent = error.message || 'Could not connect to Supabase. Check the URL, anon key, tables, and access policies.';
-            }
-        }
-
         async function testSupabaseStorage() {
-            const status = document.getElementById('supabase-connection-status');
-            const dbUrl = document.getElementById('supabase-url').value.trim();
-            const dbKey = document.getElementById('supabase-key').value.trim();
-            if (!dbUrl || !dbKey) {
-                status.textContent = 'Enter the project URL and anon key before testing Storage.';
-                return;
-            }
-            if (!window.supabase) {
-                status.textContent = 'Supabase client could not be loaded. Check your connection and reload the app.';
+            if (!supabaseClient) {
+                setCloudStatus('Supabase client is unavailable. Reload the app and try again.');
                 return;
             }
             const failedUpload = lastFailedHavsUpload;
-            const filePath = failedUpload ? failedUpload.filePath : 'havs/havs_storage_test/HAVS_Storage_Test_' + Date.now() + '.pdf';
-            status.textContent = failedUpload ? 'Retrying the failed report at its original Storage path...' : 'Testing Storage upload and cleanup...';
+            if (!failedUpload) return;
+            const filePath = failedUpload.filePath;
+            setCloudStatus('Retrying the failed report PDF upload...');
             try {
-                const client = window.supabase.createClient(dbUrl, dbKey);
+                const client = supabaseClient;
                 const storage = client.storage.from('reports');
-                const testPdf = failedUpload ? failedUpload.pdfBlob : new Blob(['%PDF-1.4\n', ' '.repeat(300 * 1024), '\n%%EOF'], { type: 'application/pdf' });
+                const testPdf = failedUpload.pdfBlob;
                 const { error: uploadError } = await storage.upload(filePath, testPdf, {
                     contentType: 'application/pdf',
                     upsert: true
@@ -450,18 +391,14 @@
                     if (auditError) throw auditError;
                     saveHavsAuditLocally(failedUpload.audit);
                     lastFailedHavsUpload = null;
-                    document.getElementById('supabase-test-storage').textContent = 'Test Storage';
-                    status.textContent = 'The failed report PDF and its audit record have now synced successfully.';
-                } else {
-                    const { error: removeError } = await storage.remove([filePath]);
-                    if (removeError) throw removeError;
-                    status.textContent = 'PDF Storage test passed: temporary PDF uploaded and removed.';
+                    document.getElementById('supabase-retry-upload').hidden = true;
+                    setCloudStatus('The failed report PDF and its audit record have now synced successfully.');
                 }
             } catch (error) {
                 const message = getCloudErrorMessage(error);
-                status.textContent = message.toLowerCase().includes('load failed')
+                setCloudStatus(message.toLowerCase().includes('load failed')
                     ? `Upload failed before Supabase returned an HTTP response (Load failed). (PDF ${(testPdfSize(failedUpload) / (1024 * 1024)).toFixed(1)} MB; bucket reports; path ${filePath})`
-                    : `${failedUpload ? 'Report retry' : 'PDF Storage test'} failed: ${message} (PDF ${(testPdfSize(failedUpload) / (1024 * 1024)).toFixed(1)} MB; bucket reports; path ${filePath})`;
+                    : `Report retry failed: ${message} (PDF ${(testPdfSize(failedUpload) / (1024 * 1024)).toFixed(1)} MB; bucket reports; path ${filePath})`);
             }
         }
 
@@ -469,10 +406,7 @@
             return failedUpload ? failedUpload.pdfBlob.size : 300 * 1024;
         }
 
-        document.getElementById('supabase-settings-button').onclick = openSupabaseSettings;
-        document.getElementById('supabase-cancel').onclick = function() { document.getElementById('supabase-modal').style.display = 'none'; };
-        document.getElementById('supabase-form').addEventListener('submit', connectSupabase);
-        document.getElementById('supabase-test-storage').addEventListener('click', testSupabaseStorage);
+        document.getElementById('supabase-retry-upload').addEventListener('click', testSupabaseStorage);
 
         function getAuditProjectIds(projectName) {
             function readArray(key) {
@@ -549,9 +483,10 @@
         async function syncHavsAudit(audit, pdfBlob, fileName) {
             saveHavsAuditLocally(audit);
             lastFailedHavsUpload = null;
+            document.getElementById('supabase-retry-upload').hidden = true;
             if (!supabaseClient) {
-                setCloudStatus('Saved locally; cloud keys not configured');
-                if (cloudRequired) throw new Error('Supabase is not connected. Return to the Supervisor Portal and configure the cloud connection.');
+                setCloudStatus('Saved locally; Supabase is unavailable');
+                if (cloudRequired) throw new Error('Supabase is unavailable. Check your connection and reload the app.');
                 return;
             }
             let syncStage = 'PDF upload';
@@ -572,6 +507,7 @@
                         pdfBlob,
                         filePath: 'havs/' + audit.id + '/HAVS_' + audit.id + '.pdf'
                     };
+                    document.getElementById('supabase-retry-upload').hidden = false;
                 }
                 const message = getCloudErrorMessage(error);
                 console.error('HAVS Supabase ' + syncStage + ' failed:', error);
@@ -588,11 +524,9 @@
             const token = params.get('token');
             if (!token) return true;
             const cloudLink = params.get('cloud') === '1';
-            const dbUrl = localStorage.getItem('tw_supa_url') || '';
-            const dbKey = localStorage.getItem('tw_supa_key') || '';
-            if (dbUrl && dbKey && window.supabase) {
+            if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
                 try {
-                    const client = window.supabase.createClient(dbUrl, dbKey);
+                    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                     const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
                     if (cloudLink || !error) return !error && Boolean(data);
                 } catch (error) { return false; }
@@ -611,7 +545,7 @@
             branding = await SharedBranding.load(supabaseClient, branding);
             applySharedBranding();
             if (cloudRequired && !supabaseClient) {
-                alert('Supabase is not connected. Configure the cloud connection in the Supervisor Portal before starting this briefing.');
+                alert('Supabase is unavailable. Check your connection and reload this briefing.');
                 window.location.replace('supervisor.html' + (window.location.search || ''));
                 return;
             }

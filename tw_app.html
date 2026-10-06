@@ -53,7 +53,6 @@ body { margin: 0; background-color: #E5DDD5; background-image: url('https://user
 </div>
 <div class="flex items-center gap-2">
 <span id="cloud-status" class="hidden text-[10px] opacity-80 sm:inline" role="status">Local-only storage</span>
-<button id="supabase-settings-button" type="button" class="settings-btn" aria-label="Supabase connection settings" title="Supabase connection settings"><i data-lucide="settings-2" class="w-4 h-4"></i></button>
 <a id="supervisorPortalLink" href="supervisor.html" class="text-[10px] bg-black/30 hover:bg-black/40 text-white px-2 py-1.5 rounded font-bold uppercase tracking-wider inline-flex items-center gap-1" aria-label="Return to Supervisor Portal"><i data-lucide="arrow-left" class="w-3.5 h-3.5"></i><span>Portal</span></a>
 </div>
 </div>
@@ -83,22 +82,6 @@ body { margin: 0; background-color: #E5DDD5; background-image: url('https://user
 </section>
 </div>
 
-<div id="supabase-modal" class="tw-modal">
-<form id="supabase-form" class="tw-modal-panel" novalidate>
-<h2 class="mb-2 text-base font-bold text-[#075E54]">Supabase Connection</h2>
-<p class="mb-3 text-xs text-slate-600">Credentials stay on this device. Reconnect here if this project’s settings change.</p>
-<label class="form-label" for="supabase-url">Project URL</label>
-<input type="url" id="supabase-url" class="tw-select" autocomplete="url" required>
-<label class="form-label" for="supabase-key">Anon key</label>
-<input type="password" id="supabase-key" class="tw-select" autocomplete="off" required>
-<p id="supabase-connection-status" class="mt-2 min-h-5 text-xs text-slate-600" role="status" aria-live="polite"></p>
-<div class="mt-3 flex gap-2">
-<button type="submit" class="flex-1 rounded-md bg-[#075E54] px-3 py-2 text-sm font-bold text-white">Connect</button>
-<button type="button" id="supabase-cancel" class="flex-1 rounded-md bg-slate-200 px-3 py-2 text-sm font-bold text-slate-700">Cancel</button>
-</div>
-</form>
-</div>
-
 <!-- LIGHTBOX MODAL -->
 <div id="lightboxModal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-[100]" onclick="closeLightbox()">
 <img id="lightboxImg" src="" class="max-w-full max-h-full rounded shadow-2xl object-contain cursor-zoom-out" />
@@ -124,8 +107,8 @@ body { margin: 0; background-color: #E5DDD5; background-image: url('https://user
 </div>
 
 <script>
-let SUPABASE_URL = localStorage.getItem('tw_supa_url') || "";
-let SUPABASE_ANON_KEY = localStorage.getItem('tw_supa_key') || "";
+let SUPABASE_URL = SharedSupabase.url;
+let SUPABASE_ANON_KEY = SharedSupabase.anonKey;
 let supabaseClient = null;
 let cloudRequired = false;
 
@@ -288,11 +271,9 @@ async function validateSupervisorLink(params) {
     const token = params.get('token');
     if (!token) return true;
     const cloudRequired = params.get('cloud') === '1';
-    const dbUrl = localStorage.getItem('tw_supa_url') || '';
-    const dbKey = localStorage.getItem('tw_supa_key') || '';
-    if (dbUrl && dbKey && window.supabase) {
+    if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
         try {
-            const client = window.supabase.createClient(dbUrl, dbKey);
+            const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
             if (cloudRequired || !error) return !error && Boolean(data);
         } catch (error) { return false; }
@@ -316,7 +297,7 @@ window.onload = async function() {
         }
     }
     if (cloudRequired && !supabaseClient) {
-        alert('Supabase is not connected. Return to the Supervisor Portal and configure the cloud connection.');
+        alert('Supabase is unavailable. Check your connection and reload this inspection.');
         window.location.replace('supervisor.html' + (window.location.search || ''));
         return;
     }
@@ -355,55 +336,6 @@ window.onload = async function() {
     document.getElementById('cloud-status').textContent = supabaseClient ? 'Cloud sync ready' : 'Local-only storage';
     document.getElementById('setup-modal').classList.add('open');
 };
-
-function openSupabaseSettings() {
-    document.getElementById('supabase-url').value = SUPABASE_URL;
-    document.getElementById('supabase-key').value = SUPABASE_ANON_KEY;
-    document.getElementById('supabase-connection-status').textContent = '';
-    document.getElementById('supabase-modal').classList.add('open');
-}
-
-async function connectSupabase(event) {
-    event.preventDefault();
-    const dbUrl = document.getElementById('supabase-url').value.trim();
-    const dbKey = document.getElementById('supabase-key').value.trim();
-    const status = document.getElementById('supabase-connection-status');
-    if (!dbUrl || !dbKey) {
-        status.textContent = 'Enter both the project URL and anon key.';
-        return;
-    }
-    if (!window.supabase) {
-        status.textContent = 'Supabase client could not be loaded. Check your connection and reload.';
-        return;
-    }
-    status.textContent = 'Verifying connection...';
-    try {
-        const client = window.supabase.createClient(dbUrl, dbKey);
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get('token');
-        if (cloudRequired && token) {
-            const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
-            if (error) throw error;
-            if (!data) throw new Error('This supervisor link is not active in the selected Supabase project.');
-        } else {
-            const { error } = await client.from('clients').select('id').limit(1);
-            if (error) throw error;
-        }
-        localStorage.setItem('tw_supa_url', dbUrl);
-        localStorage.setItem('tw_supa_key', dbKey);
-        SUPABASE_URL = dbUrl;
-        SUPABASE_ANON_KEY = dbKey;
-        supabaseClient = client;
-        document.getElementById('cloud-status').textContent = 'Cloud sync ready';
-        document.getElementById('supabase-modal').classList.remove('open');
-    } catch (error) {
-        status.textContent = error.message || 'Could not verify the Supabase project and anon key.';
-    }
-}
-
-document.getElementById('supabase-settings-button').addEventListener('click', openSupabaseSettings);
-document.getElementById('supabase-cancel').addEventListener('click', () => document.getElementById('supabase-modal').classList.remove('open'));
-document.getElementById('supabase-form').addEventListener('submit', connectSupabase);
 
 async function fetchData() {
     if (supabaseClient) {
@@ -994,7 +926,7 @@ function generatePdfBlob(audit, c, s) {
 }
 
 async function uploadPdfToSupabase(audit, pdfBlob) {
-    if (!supabaseClient) throw new Error('Supabase is not connected. Return to the Supervisor Portal and connect first.');
+    if (!supabaseClient) throw new Error('Supabase is unavailable. Reload the app and try again.');
     const fileName = `TW_Report_${audit.id}_${audit.date}.pdf`;
     const filePath = `tw/${fileName}`;
     const uploadRequest = supabaseClient.storage
@@ -1023,7 +955,7 @@ async function submitInspection() {
         const inspectorNotes = document.getElementById('inputInspectorNotes').value.trim();
 
         if (cloudRequired && !supabaseClient) {
-            throw new Error('Supabase is not connected. Return to the Supervisor Portal and connect first.');
+            throw new Error('Supabase is unavailable. Reload the app and try again.');
         }
         if (!clientId || !siteId || !inspectorName || !inspectorQuals) {
             alert("⚠️ Missing Information: Please fill in Project, Site, TWS Name, and Qualifications.");

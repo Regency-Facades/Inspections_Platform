@@ -30,7 +30,7 @@ body { background-color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-se
 </div>
 <div class="flex flex-wrap items-center gap-2">
 <button type="button" onclick="openBrandingModal()" class="bg-black/20 hover:bg-black/30 border border-white/20 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5"><i data-lucide="palette" class="w-4 h-4"></i> Branding Panel</button>
-<button type="button" onclick="openDbModal()" class="bg-black/20 hover:bg-black/30 border border-white/20 px-3.5 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5"><i data-lucide="database" class="w-4 h-4"></i> <span id="dbStatusLabel">Database Sync</span></button>
+<span id="dbStatusLabel" class="px-3.5 py-2 text-sm font-medium"><i data-lucide="database" class="mr-1.5 inline h-4 w-4"></i>Database Sync</span>
 <button type="button" onclick="openClientModal()" class="bg-amber-700 hover:bg-amber-600 border border-amber-500/50 text-white px-3 py-2 rounded-lg text-sm font-medium transition">+ Register Project</button>
 <button type="button" onclick="openSiteModal()" class="bg-amber-700 hover:bg-amber-600 border border-amber-500/50 text-white px-3 py-2 rounded-lg text-sm font-medium transition">+ Register Site</button>
 <button type="button" onclick="openManageModal()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5"><i data-lucide="folder-cog" class="w-4 h-4"></i> Manage Projects & Sites</button>
@@ -282,24 +282,6 @@ Review non-compliant items, attach remediation evidence regarding temporary work
 </div>
 </div>
 
-<!-- DB MODAL -->
-<div id="dbModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-<div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-3 max-h-[90vh] overflow-y-auto">
-<div class="flex items-center justify-between border-b pb-3">
-<h3 class="font-bold text-slate-800 text-base">Supabase Cloud Sync</h3>
-<button type="button" onclick="closeDbModal()"><i data-lucide="x" class="w-5 h-5 text-slate-400 hover:text-slate-600"></i></button>
-</div>
-<form onsubmit="handleSaveDbKeys(event)" class="space-y-3 text-xs">
-<div><label class="block font-semibold mb-1">Supabase Project URL</label><input type="text" id="inputSupaUrl" class="w-full border rounded p-2 font-mono" placeholder="https://xyz.supabase.co" /></div>
-<div><label class="block font-semibold mb-1">Supabase Anon Key</label><input type="text" id="inputSupaKey" class="w-full border rounded p-2 font-mono" placeholder="ey..." /></div>
-<div class="flex flex-col gap-2 pt-2">
-<button type="submit" class="w-full py-2.5 bg-amber-800 hover:bg-amber-700 text-white rounded font-bold shadow">Save Sync Keys & Connect</button>
-<button type="button" onclick="clearLocalCacheAndReload()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-bold border">Clear Local Cache & Fetch Fresh</button>
-</div>
-</form>
-</div>
-</div>
-
 <!-- CLIENT/PROJECT MODAL -->
 <div id="clientModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
 <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-3">
@@ -352,8 +334,8 @@ Review non-compliant items, attach remediation evidence regarding temporary work
 </div>
 
 <script>
-let SUPABASE_URL = localStorage.getItem('tw_supa_url') || "";
-let SUPABASE_ANON_KEY = localStorage.getItem('tw_supa_key') || "";
+let SUPABASE_URL = SharedSupabase.url;
+let SUPABASE_ANON_KEY = SharedSupabase.anonKey;
 let supabaseClient = null;
 let categoryChartInst = null;
 let typeChartInst = null;
@@ -1770,12 +1752,6 @@ if (error) alert("Warning: Saved locally, but cloud sync failed! Supabase Error:
 populateDropdowns(); renderDashboard(); closeSiteModal();
 }
 
-function handleSaveDbKeys(e) {
-e.preventDefault();
-localStorage.setItem('tw_supa_url', document.getElementById('inputSupaUrl').value.trim()); localStorage.setItem('tw_supa_key', document.getElementById('inputSupaKey').value.trim());
-closeDbModal(); location.reload();
-}
-
 function handleLogoUpload(input) {
 if (input.files && input.files[0]) {
 const reader = new FileReader();
@@ -1801,8 +1777,6 @@ function openClientModal() { document.getElementById('inputClientName').value = 
 function closeClientModal() { document.getElementById('clientModal').classList.add('hidden'); }
 function openSiteModal() { document.getElementById('siteModal').classList.remove('hidden'); document.getElementById('siteModal').classList.add('flex'); }
 function closeSiteModal() { document.getElementById('siteModal').classList.add('hidden'); }
-function openDbModal() { document.getElementById('inputSupaUrl').value = SUPABASE_URL; document.getElementById('inputSupaKey').value = SUPABASE_ANON_KEY; document.getElementById('dbModal').classList.remove('hidden'); document.getElementById('dbModal').classList.add('flex'); }
-function closeDbModal() { document.getElementById('dbModal').classList.add('hidden'); }
 function openLightbox(src) { document.getElementById('lightboxImg').src = src; document.getElementById('lightboxModal').classList.remove('hidden'); document.getElementById('lightboxModal').classList.add('flex'); }
 function closeLightbox() { document.getElementById('lightboxModal').classList.add('hidden'); document.getElementById('lightboxModal').classList.remove('flex'); }
 </script>
