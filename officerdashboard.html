@@ -411,7 +411,7 @@ return [];
 
 function cacheAuditRecords(records) {
 cloudAuditIds = new Set(records.filter(record => record && record.id !== undefined).map(record => String(record.id)));
-cloudAuditPdfIds = new Set(records.filter(record => record && record.id !== undefined && record.pdfUrl).map(record => String(record.id)));
+cloudAuditPdfIds = new Set();
 const localRecords = [
 ...readStoredRecords('tw_audits'),
 ...readStoredRecords('puwer_records'),
@@ -420,14 +420,41 @@ const localRecords = [
 const merged = new Map();
 [...localRecords, ...records].filter(record => record && record.id !== undefined).forEach(record => {
 const id = String(record.id);
-const previous = merged.get(id);
-merged.set(id, previous && !record.pdfUrl && previous.pdfUrl ? { ...record, pdfUrl: previous.pdfUrl } : record);
+merged.set(id, record);
 });
 const allRecords = Array.from(merged.values());
 audits = allRecords.filter(record => complianceRecordType(record) === 'tw');
 localStorage.setItem('tw_audits', JSON.stringify(audits));
 localStorage.setItem('puwer_records', JSON.stringify(allRecords.filter(record => complianceRecordType(record) === 'puwer')));
 localStorage.setItem('havs_records', JSON.stringify(allRecords.filter(record => complianceRecordType(record) === 'havs')));
+}
+
+async function verifyCloudReportFiles(records) {
+const storage = requireSupabaseClient().storage.from('reports');
+const validIds = new Set();
+const missingRecords = [];
+await Promise.all(records.filter(record => record && record.pdfUrl).map(async record => {
+const objectPath = getReportStoragePath(record);
+if (!objectPath) return;
+const separator = objectPath.lastIndexOf('/');
+const folder = objectPath.slice(0, separator);
+const fileName = objectPath.slice(separator + 1);
+const { data, error } = await storage.list(folder, { search: fileName, limit: 10 });
+if (!error && (data || []).some(file => file.name === fileName)) {
+validIds.add(String(record.id));
+return;
+}
+const response = await fetch(record.pdfUrl, { method: 'HEAD', cache: 'no-store' });
+if (response.ok) validIds.add(String(record.id));
+else if (response.status === 404) missingRecords.push(record);
+else throw new Error(error ? error.message : 'Report PDF check returned HTTP ' + response.status + '.');
+}));
+for (const record of missingRecords) {
+await requireChangedRows(requireSupabaseClient().from('audits').update({ pdfUrl: '' }).eq('id', record.id), 'Clearing a missing report PDF URL');
+record.pdfUrl = '';
+}
+cacheAuditRecords(records);
+cloudAuditPdfIds = validIds;
 }
 
 window.onload = async function() {
@@ -471,7 +498,10 @@ if (s !== null) { sites = s; localStorage.setItem('tw_sites', JSON.stringify(sit
 
 const { data: a, error: aErr } = await supabaseClient.from('audits').select('*');
 if (aErr) throw aErr;
-if (a !== null) cacheAuditRecords(a);
+if (a !== null) {
+cacheAuditRecords(a);
+await verifyCloudReportFiles(a);
+}
 const { data: links, error: linksErr } = await supabaseClient.from('supervisor_links').select('*').eq('active', true);
 if (linksErr) throw linksErr;
 if (links !== null) {
@@ -664,7 +694,8 @@ button.innerHTML = '<i data-lucide="' + icon + '" class="w-3.5 h-3.5"></i><span>
 button.addEventListener('click', action);
 actions.appendChild(button);
 });
-if (record.pdfUrl) {
+const cloudHasPdf = cloudAuditPdfIds.has(String(record.id));
+if (cloudHasPdf && record.pdfUrl) {
 const uploadedPdf = document.createElement('a');
 uploadedPdf.href = record.pdfUrl;
 uploadedPdf.target = '_blank';
@@ -680,15 +711,15 @@ missingPdf.className = 'mr-1 inline-flex items-center rounded-lg border border-a
 missingPdf.textContent = 'Full PDF unavailable';
 actions.appendChild(missingPdf);
 }
-if (!cloudAuditIds.has(String(record.id)) || !cloudAuditPdfIds.has(String(record.id))) {
+if (!cloudAuditIds.has(String(record.id)) || !cloudHasPdf) {
 const syncButton = document.createElement('button');
 syncButton.type = 'button';
 syncButton.className = 'mr-1 inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-2 py-1.5 text-xs font-bold text-white hover:bg-emerald-600';
-syncButton.textContent = record.pdfUrl ? 'Sync record' : 'Upload actual PDF';
-syncButton.title = record.pdfUrl ? 'Save this report record to Supabase' : 'Upload the actual inspection PDF from this device';
+syncButton.textContent = cloudHasPdf ? 'Sync record' : 'Upload actual PDF';
+syncButton.title = cloudHasPdf ? 'Save this report record to Supabase' : 'Upload the actual inspection PDF from this device';
 syncButton.disabled = !supabaseClient;
 syncButton.addEventListener('click', () => {
-if (record.pdfUrl) {
+if (cloudHasPdf) {
 syncLocalComplianceReport(type, record);
 return;
 }
@@ -715,7 +746,7 @@ if (pdfFile && pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase()
 alert('Choose the actual inspection PDF file.');
 return;
 }
-const savedRecord = { ...record, pdfUrl: record.pdfUrl || '' };
+const savedRecord = { ...record, pdfUrl: cloudAuditPdfIds.has(String(record.id)) && !pdfFile ? record.pdfUrl : '' };
 let rowSaved = false;
 try {
 const { error: rowError } = await supabaseClient.from('audits').upsert([savedRecord], { onConflict: 'id' });
