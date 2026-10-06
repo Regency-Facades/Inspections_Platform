@@ -348,18 +348,19 @@
         }
 
         async function syncPuwerAudit(audit, pdfBlob, fileName) {
-            savePuwerAuditLocally(audit);
             if (!supabaseClient) {
-                setCloudStatus('Saved locally; Supabase is unavailable');
-                if (cloudRequired) throw new Error('Supabase is unavailable. Check your connection and reload the app.');
-                return;
+                throw new Error('Supabase is unavailable. Check your connection and reload the app.');
             }
+            savePuwerAuditLocally(audit);
             let syncStage = 'audit record save';
             try {
-                const insertRequest = supabaseClient.from('audits').upsert([audit], { onConflict: 'id' });
+                const insertRequest = supabaseClient.from('audits').upsert([audit], { onConflict: 'id' }).select('id').single();
                 const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Audit sync timed out after 30 seconds')), 30000));
-                const { error } = await Promise.race([insertRequest, timeout]);
+                const { data: savedAudit, error } = await Promise.race([insertRequest, timeout]);
                 if (error) throw error;
+                if (!savedAudit || String(savedAudit.id) !== String(audit.id)) {
+                    throw new Error('Supabase did not confirm that the inspection record was saved.');
+                }
 
                 syncStage = 'PDF upload';
                 audit.pdfUrl = await uploadPuwerPdf(audit, pdfBlob, fileName) || '';
@@ -367,8 +368,11 @@
                 savePuwerAuditLocally(audit);
 
                 syncStage = 'PDF link save';
-                const { error: linkError } = await supabaseClient.from('audits').update({ pdfUrl: audit.pdfUrl }).eq('id', audit.id);
+                const { data: linkedAudit, error: linkError } = await supabaseClient.from('audits').update({ pdfUrl: audit.pdfUrl }).eq('id', audit.id).select('id').single();
                 if (linkError) throw linkError;
+                if (!linkedAudit || String(linkedAudit.id) !== String(audit.id)) {
+                    throw new Error('Supabase did not confirm that the report PDF was linked to the inspection.');
+                }
                 setCloudStatus('Audit and PDF synced');
             } catch (error) {
                 if (syncStage !== 'audit record save') {

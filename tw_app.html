@@ -936,7 +936,7 @@ async function uploadPdfToSupabase(audit, pdfBlob) {
     const { error } = await Promise.race([uploadRequest, timeout]);
     if (error) throw error;
     const { data: urlData } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
-    if (!urlData) throw new Error('Supabase uploaded the report but did not return its public URL.');
+    if (!urlData || !urlData.publicUrl) throw new Error('Supabase uploaded the report but did not return its public URL.');
     return urlData.publicUrl;
 }
 
@@ -966,7 +966,7 @@ async function submitInspection() {
         const inspectorQuals = document.getElementById('inputInspectorQuals').value.trim();
         const inspectorNotes = document.getElementById('inputInspectorNotes').value.trim();
 
-        if (cloudRequired && !supabaseClient) {
+        if (!supabaseClient) {
             throw new Error('Supabase is unavailable. Reload the app and try again.');
         }
         if (!clientId || !siteId || !inspectorName || !inspectorQuals) {
@@ -1026,23 +1026,29 @@ async function submitInspection() {
             localStorage.setItem('tw_audits', JSON.stringify(existing));
         } catch(e) { console.warn("Local storage full, saving to cloud primary."); }
 
-        // Upload the report before recording a successful cloud-linked inspection.
-        if (supabaseClient) {
-            const pdfUrl = await uploadPdfToSupabase(newAudit, pdfBlob);
-            newAudit.pdfUrl = pdfUrl;
-            const recordIndex = existing.findIndex(audit => audit.id === newAudit.id);
-            if (recordIndex >= 0) existing[recordIndex] = newAudit;
-            try { localStorage.setItem('tw_audits', JSON.stringify(existing)); }
-            catch(e) { console.warn("Local storage full, saving to cloud primary."); }
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase audit sync timed out')), 30000));
+        const saveRequest = supabaseClient.from('audits').upsert([newAudit], { onConflict: 'id' }).select('id').single();
+        const { data: savedAudit, error: saveError } = await Promise.race([saveRequest, timeout]);
+        if (saveError) throw saveError;
+        if (!savedAudit || String(savedAudit.id) !== String(newAudit.id)) {
+            throw new Error('Supabase did not confirm that the inspection record was saved.');
         }
 
-        if (supabaseClient) {
-            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase audit sync timed out')), 30000));
-            const { error } = await Promise.race([supabaseClient.from('audits').insert([newAudit]), timeout]);
-            if (error) throw error;
+        const pdfUrl = await uploadPdfToSupabase(newAudit, pdfBlob);
+        const linkTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase PDF link save timed out')), 30000));
+        const linkRequest = supabaseClient.from('audits').update({ pdfUrl }).eq('id', newAudit.id).select('id').single();
+        const { data: linkedAudit, error: linkError } = await Promise.race([linkRequest, linkTimeout]);
+        if (linkError) throw linkError;
+        if (!linkedAudit || String(linkedAudit.id) !== String(newAudit.id)) {
+            throw new Error('Supabase did not confirm that the report PDF was linked to the inspection.');
         }
+        newAudit.pdfUrl = pdfUrl;
+        const recordIndex = existing.findIndex(audit => audit.id === newAudit.id);
+        if (recordIndex >= 0) existing[recordIndex] = newAudit;
+        try { localStorage.setItem('tw_audits', JSON.stringify(existing)); }
+        catch(e) { console.warn("Local storage full, saving to cloud primary."); }
 
-        alert(`✅ Formal TW Report Submitted!\nCompliance Score: ${score}%\n${newAudit.pdfUrl ? 'PDF uploaded to Supabase cloud.' : 'Saved locally.'}`);
+        alert(`✅ Formal TW Report Submitted!\nCompliance Score: ${score}%\nInspection record and PDF saved to Supabase.`);
         window.location.href = 'officerdashboard.html';
 
     } catch (err) {
