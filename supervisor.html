@@ -7,7 +7,6 @@
   <title>Supervisor Portal | Site Compliance</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="branding.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -91,8 +90,8 @@
   <script>
     let sharedBranding = SharedBranding.readLocal();
 
-    async function applySharedBranding(client) {
-      sharedBranding = await SharedBranding.load(client, sharedBranding);
+    async function applySharedBranding() {
+      sharedBranding = await SharedBranding.load(sharedBranding);
       document.querySelector('header').style.backgroundColor = sharedBranding.color || '#075E54';
       document.querySelector('header').style.color = sharedBranding.textColor || '#ffffff';
       document.getElementById('sharedBrandTitle').textContent = sharedBranding.title || '';
@@ -114,69 +113,28 @@
       let supervisorName = (params.get('name') || '').trim();
       let projectName = (params.get('project') || '').trim();
       const token = params.get('token');
-      const requiresCloud = params.get('cloud') === '1';
-      const dbUrl = SharedSupabase.url;
-      const dbKey = SharedSupabase.anonKey;
-      let brandingClient = null;
-      if (dbUrl && dbKey && window.supabase) {
-        try { brandingClient = window.supabase.createClient(dbUrl, dbKey); } catch (error) {}
-      }
-
       if (!token && (supervisorName || projectName)) {
         showLinkError('This supervisor link is missing its access token. Generate a new link from the officer dashboard.');
         return;
       }
 
-      if (!token && dbUrl && dbKey) {
-        if (!window.supabase) {
-          showLinkError('The Supabase client could not be loaded. Check your connection and reload this page.');
-          return;
-        }
-        try {
-          const client = window.supabase.createClient(dbUrl, dbKey);
-          const { error } = await client.from('clients').select('id').limit(1);
-          if (error) throw error;
-        } catch (error) {
-          showLinkError('The Supabase connection could not be verified. Check your network and project access.');
-          return;
-        }
-      }
-
       if (token) {
-        if (dbUrl && dbKey && window.supabase) {
-          try {
-            const client = window.supabase.createClient(dbUrl, dbKey);
-            const { data, error } = await client.from('supervisor_links').select('token, supervisor_name, project').eq('token', token).eq('active', true).maybeSingle();
-            if (error || !data) throw new Error('This supervisor link is invalid or has been revoked.');
-            supervisorName = data.supervisor_name;
-            projectName = data.project;
-          } catch (error) {
-            showLinkError(error.message || 'This supervisor link could not be verified.');
-            return;
-          }
-        } else if (requiresCloud) {
-          showLinkError('The Supabase client could not be loaded. Check your connection and reload this page.');
+        let links = [];
+        try { links = JSON.parse(localStorage.getItem('supervisor_links') || '[]'); } catch (error) {}
+        const link = links.find(item => String(item.token || item.id) === token && item.active !== false);
+        if (!link) {
+          showLinkError('This link is invalid or has been revoked. Open it in the browser where it was created.');
           return;
-        } else {
-          let links = [];
-          try { links = JSON.parse(localStorage.getItem('supervisor_links') || '[]'); } catch (error) {}
-          const link = links.find(item => String(item.token || item.id) === token && item.active !== false);
-          if (!link) {
-            showLinkError('This supervisor link is invalid or has been revoked. Connect to the same browser used to generate this offline link.');
-            return;
-          }
-          supervisorName = link.supervisor_name || link.name || supervisorName;
-          projectName = link.project || projectName;
         }
+        supervisorName = link.supervisor_name || link.name || supervisorName;
+        projectName = link.project || projectName;
       }
 
-      await applySharedBranding(brandingClient);
+      await applySharedBranding();
       document.getElementById('welcomeHeading').textContent = `Welcome, ${supervisorName || 'Supervisor'}`;
       document.getElementById('projectName').textContent = projectName || 'Project not specified';
       const context = new URLSearchParams(params);
-      context.delete('dbUrl');
-      context.delete('dbKey');
-      if (dbUrl && dbKey) context.set('cloud', '1');
+      context.delete('cloud');
       context.set('name', supervisorName);
       context.set('project', projectName);
       const contextQuery = `?${context.toString()}`;

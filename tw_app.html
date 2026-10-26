@@ -6,7 +6,6 @@
 <title>Temporary Works Field Inspection (TWS)</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="branding.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -52,7 +51,6 @@ body { margin: 0; background-color: #E5DDD5; background-image: url('https://user
 </div>
 </div>
 <div class="flex items-center gap-2">
-<span id="cloud-status" class="hidden text-[10px] opacity-80 sm:inline" role="status">Local-only storage</span>
 <a id="supervisorPortalLink" href="supervisor.html" class="text-[10px] bg-black/30 hover:bg-black/40 text-white px-2 py-1.5 rounded font-bold uppercase tracking-wider inline-flex items-center gap-1" aria-label="Return to Supervisor Portal"><i data-lucide="arrow-left" class="w-3.5 h-3.5"></i><span>Portal</span></a>
 </div>
 </div>
@@ -107,10 +105,6 @@ body { margin: 0; background-color: #E5DDD5; background-image: url('https://user
 </div>
 
 <script>
-let SUPABASE_URL = SharedSupabase.url;
-let SUPABASE_ANON_KEY = SharedSupabase.anonKey;
-let supabaseClient = null;
-let cloudRequired = false;
 
 const DEFAULT_TOPICS = [
 "1. Scaffolding & Edge Protection (TW Item)",
@@ -267,18 +261,9 @@ let maxUnlockedIndex = 0;
 let activeQuestionIndex = 0;
 let inspectionStarted = false;
 
-async function validateSupervisorLink(params) {
+function validateSupervisorLink(params) {
     const token = params.get('token');
     if (!token) return true;
-    const cloudRequired = params.get('cloud') === '1';
-    if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-        try {
-            const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
-            if (cloudRequired || !error) return !error && Boolean(data);
-        } catch (error) { return false; }
-    }
-    if (cloudRequired) return false;
     try {
         const links = JSON.parse(localStorage.getItem('supervisor_links') || '[]');
         return links.some(link => String(link.token || link.id) === token && link.active !== false);
@@ -287,32 +272,16 @@ async function validateSupervisorLink(params) {
 
 window.onload = async function() {
     const params = new URLSearchParams(window.location.search);
-    cloudRequired = params.get('cloud') === '1';
     document.getElementById('supervisorPortalLink').href = 'supervisor.html' + (window.location.search || '');
-    if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-        try {
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        } catch (error) {
-            console.warn('Supabase initialization failed:', error);
-        }
-    }
-    if (cloudRequired && !supabaseClient) {
-        alert('Supabase is unavailable. Check your connection and reload this inspection.');
-        window.location.replace('supervisor.html' + (window.location.search || ''));
-        return;
-    }
-    if (!(await validateSupervisorLink(params))) {
+    if (!validateSupervisorLink(params)) {
         alert('This supervisor link is invalid or has been revoked.');
         window.location.replace('supervisor.html' + (window.location.search || ''));
         return;
     }
     const supervisorName = (params.get('name') || '').trim();
     const projectName = (params.get('project') || '').trim();
-    branding = supabaseClient
-        ? await SharedBranding.load(supabaseClient, branding)
-        : SharedBranding.readLocal(branding);
+    branding = await SharedBranding.load(branding);
     applyBranding();
-    await fetchData();
     populateDropdowns();
     document.getElementById('inputInspectorName').value = supervisorName;
     if (projectName) {
@@ -333,25 +302,8 @@ window.onload = async function() {
     lucide.createIcons();
     initSignaturePad();
     updateSequentialLocks();
-    document.getElementById('cloud-status').textContent = supabaseClient ? 'Cloud sync ready' : 'Local-only storage';
     document.getElementById('setup-modal').classList.add('open');
 };
-
-async function fetchData() {
-    if (supabaseClient) {
-        try {
-            const { data: c, error: cErr } = await supabaseClient.from('clients').select('*');
-            if (cErr) throw cErr;
-            if(c && c.length > 0) { clients = c; localStorage.setItem('tw_clients', JSON.stringify(clients)); }
-
-            const { data: s, error: sErr } = await supabaseClient.from('sites').select('*');
-            if (sErr) throw sErr;
-            if(s && s.length > 0) { sites = s; localStorage.setItem('tw_sites', JSON.stringify(sites)); }
-        } catch(e) {
-            console.warn("Cloud Sync Notice: " + e.message);
-        }
-    }
-}
 
 function initSignaturePad() {
     const c = document.getElementById('sigCanvas');
@@ -618,7 +570,7 @@ function renderTWFinalStep() {
     submit.id = 'submitBtn';
     submit.type = 'button';
     submit.className = 'chat-action mt-3';
-    submit.textContent = 'Submit Formal TW Report & Upload PDF';
+    submit.textContent = 'Submit & Download TW Report';
     submit.addEventListener('click', submitInspection);
     bubble.appendChild(submit);
     document.getElementById('input-area').classList.add('hidden');
@@ -925,21 +877,6 @@ function generatePdfBlob(audit, c, s) {
     return doc.output('blob');
 }
 
-async function uploadPdfToSupabase(audit, pdfBlob) {
-    if (!supabaseClient) throw new Error('Supabase is unavailable. Reload the app and try again.');
-    const fileName = `TW_Report_${audit.id}_${audit.date}.pdf`;
-    const filePath = `tw/${fileName}`;
-    const uploadRequest = supabaseClient.storage
-        .from('reports')
-        .upload(filePath, pdfBlob, { contentType: 'application/pdf', upsert: true });
-    const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Supabase PDF upload timed out')), 30000));
-    const { error } = await Promise.race([uploadRequest, timeout]);
-    if (error) throw error;
-    const { data: urlData } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
-    if (!urlData || !urlData.publicUrl) throw new Error('Supabase uploaded the report but did not return its public URL.');
-    return urlData.publicUrl;
-}
-
 function downloadPdfBlob(pdfBlob, fileName) {
     const url = URL.createObjectURL(pdfBlob);
     const link = document.createElement('a');
@@ -966,9 +903,6 @@ async function submitInspection() {
         const inspectorQuals = document.getElementById('inputInspectorQuals').value.trim();
         const inspectorNotes = document.getElementById('inputInspectorNotes').value.trim();
 
-        if (!supabaseClient) {
-            throw new Error('Supabase is unavailable. Reload the app and try again.');
-        }
         if (!clientId || !siteId || !inspectorName || !inspectorQuals) {
             alert("⚠️ Missing Information: Please fill in Project, Site, TWS Name, and Qualifications.");
             return;
@@ -1020,35 +954,19 @@ async function submitInspection() {
         const fileName = `TW_Report_${newAudit.id}_${newAudit.date}.pdf`;
         downloadPdfBlob(pdfBlob, fileName);
 
-        let existing = JSON.parse(localStorage.getItem('tw_audits')) || [];
-        existing.push(newAudit);
+        let recordSaved = true;
         try {
+            const existing = JSON.parse(localStorage.getItem('tw_audits') || '[]');
+            existing.push(newAudit);
             localStorage.setItem('tw_audits', JSON.stringify(existing));
-        } catch(e) { console.warn("Local storage full, saving to cloud primary."); }
-
-        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase audit sync timed out')), 30000));
-        const saveRequest = supabaseClient.from('audits').upsert([newAudit], { onConflict: 'id' }).select('id').single();
-        const { data: savedAudit, error: saveError } = await Promise.race([saveRequest, timeout]);
-        if (saveError) throw saveError;
-        if (!savedAudit || String(savedAudit.id) !== String(newAudit.id)) {
-            throw new Error('Supabase did not confirm that the inspection record was saved.');
+        } catch (error) {
+            recordSaved = false;
+            console.warn('Could not save the TW inspection record on this device:', error);
         }
 
-        const pdfUrl = await uploadPdfToSupabase(newAudit, pdfBlob);
-        const linkTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase PDF link save timed out')), 30000));
-        const linkRequest = supabaseClient.from('audits').update({ pdfUrl }).eq('id', newAudit.id).select('id').single();
-        const { data: linkedAudit, error: linkError } = await Promise.race([linkRequest, linkTimeout]);
-        if (linkError) throw linkError;
-        if (!linkedAudit || String(linkedAudit.id) !== String(newAudit.id)) {
-            throw new Error('Supabase did not confirm that the report PDF was linked to the inspection.');
-        }
-        newAudit.pdfUrl = pdfUrl;
-        const recordIndex = existing.findIndex(audit => audit.id === newAudit.id);
-        if (recordIndex >= 0) existing[recordIndex] = newAudit;
-        try { localStorage.setItem('tw_audits', JSON.stringify(existing)); }
-        catch(e) { console.warn("Local storage full, saving to cloud primary."); }
-
-        alert(`✅ Formal TW Report Submitted!\nCompliance Score: ${score}%\nInspection record and PDF saved to Supabase.`);
+        alert(recordSaved
+            ? `Formal TW Report downloaded.\nCompliance Score: ${score}%\nInspection record saved on this device.`
+            : `Formal TW Report downloaded.\nCompliance Score: ${score}%\nThe inspection record could not be saved in this browser.`);
         window.location.href = 'officerdashboard.html';
 
     } catch (err) {

@@ -6,7 +6,6 @@
 <title>Regency Facades - Inspections Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="branding.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -30,7 +29,7 @@ body { background-color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-se
 </div>
 <div class="flex flex-wrap items-center gap-2">
 <button type="button" onclick="openBrandingModal()" class="bg-black/20 hover:bg-black/30 border border-white/20 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5"><i data-lucide="palette" class="w-4 h-4"></i> Branding Panel</button>
-<span id="dbStatusLabel" class="px-3.5 py-2 text-sm font-medium"><i data-lucide="database" class="mr-1.5 inline h-4 w-4"></i>Database Sync</span>
+<span id="dbStatusLabel" class="px-3.5 py-2 text-sm font-medium"><i data-lucide="hard-drive" class="mr-1.5 inline h-4 w-4"></i>Saved in this browser</span>
 <button type="button" onclick="openClientModal()" class="bg-amber-700 hover:bg-amber-600 border border-amber-500/50 text-white px-3 py-2 rounded-lg text-sm font-medium transition">+ Register Project</button>
 <button type="button" onclick="openSiteModal()" class="bg-amber-700 hover:bg-amber-600 border border-amber-500/50 text-white px-3 py-2 rounded-lg text-sm font-medium transition">+ Register Site</button>
 <button type="button" onclick="openManageModal()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5"><i data-lucide="folder-cog" class="w-4 h-4"></i> Manage Projects & Sites</button>
@@ -61,7 +60,7 @@ body { background-color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-se
 <h2 id="supervisorLinkTitle" class="text-lg font-bold text-slate-800">Supervisor Link Generator</h2>
 </div>
 <p class="text-sm text-slate-500 mb-5">Create a site-specific link for a supervisor.</p>
-<p class="text-xs text-amber-800 mb-4">Revocable links require Supabase sync and the supervisor_links table. Without cloud sync, links work only in this browser.</p>
+<p class="text-xs text-amber-800 mb-4">Supervisor links are stored in this browser and can only be verified in this browser.</p>
 <form onsubmit="generateSupervisorLink(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
 <div>
 <label for="supervisorName" class="block text-sm font-semibold text-slate-700 mb-1.5">Supervisor Name</label>
@@ -74,7 +73,7 @@ body { background-color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-se
 </select>
 </div>
 <div class="md:col-span-2">
-<button type="submit" class="px-4 py-2.5 rounded-lg bg-amber-900 hover:bg-amber-800 text-white text-sm font-semibold transition">Generate Secure Link</button>
+<button type="submit" class="px-4 py-2.5 rounded-lg bg-amber-900 hover:bg-amber-800 text-white text-sm font-semibold transition">Generate Local Link</button>
 </div>
 </form>
 <div id="supervisorLinkOutput" class="hidden mt-5 pt-4 border-t border-slate-200">
@@ -183,7 +182,7 @@ body { background-color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-se
 <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2"><i data-lucide="folder-cog" class="w-5 h-5 text-amber-700"></i> Manage Projects & Site Locations</h3>
 <button type="button" onclick="closeManageModal()"><i data-lucide="x" class="w-5 h-5 text-slate-400 hover:text-slate-600"></i></button>
 </div>
-<p class="text-xs text-slate-500">Full CRUD control: edit project details, edit site locations, or delete them. All updates sync directly with Supabase.</p>
+<p class="text-xs text-slate-500">Edit or remove project details and site locations stored in this browser.</p>
 <div id="manageClientsList" class="space-y-4 pt-2"></div>
 <div class="flex justify-end pt-3 border-t">
 <button type="button" onclick="closeManageModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg text-xs">Done</button>
@@ -334,19 +333,13 @@ Review non-compliant items, attach remediation evidence regarding temporary work
 </div>
 
 <script>
-let SUPABASE_URL = SharedSupabase.url;
-let SUPABASE_ANON_KEY = SharedSupabase.anonKey;
-let supabaseClient = null;
 let categoryChartInst = null;
 let typeChartInst = null;
 let activeInspectAuditId = null;
 let activeComplianceType = 'tw';
-let cloudAuditIds = new Set();
-let cloudAuditPdfIds = new Set();
-
-let clients = JSON.parse(localStorage.getItem('tw_clients')) || [];
-let sites = JSON.parse(localStorage.getItem('tw_sites')) || [];
-let audits = JSON.parse(localStorage.getItem('tw_audits')) || [];
+let clients = readStoredRecords('tw_clients');
+let sites = readStoredRecords('tw_sites');
+let audits = readStoredRecords('tw_audits');
 let supervisorLinks = readStoredRecords('supervisor_links');
 let branding = JSON.parse(localStorage.getItem('tw_branding')) || {
 title: "Temporary Works UK",
@@ -356,39 +349,6 @@ textColor: "#ffffff",
 logoUrl: "",
 footerText: "Official Temporary Works Inspection Certificate."
 };
-
-function requireSupabaseClient() {
-if (!supabaseClient) throw new Error('Supabase is unavailable. No dashboard changes were applied.');
-return supabaseClient;
-}
-
-async function requireChangedRows(query, description, allowEmpty = false) {
-const { data, error } = await query.select('id');
-if (error) throw error;
-if (!allowEmpty && (!data || data.length === 0)) throw new Error(description + ' did not match any Supabase records.');
-return data || [];
-}
-
-function getReportStoragePath(record) {
-if (record.pdfUrl) {
-try {
-const url = new URL(record.pdfUrl, window.location.href);
-const match = url.pathname.match(/\/storage\/v1\/object\/(?:public|sign)\/reports\/(.+)$/);
-if (match) return decodeURIComponent(match[1]);
-} catch (error) {}
-}
-const type = complianceRecordType(record);
-if (type === 'puwer' || type === 'havs') return type + '/' + record.id + '/' + type.toUpperCase() + '_' + record.id + '.pdf';
-if (type === 'tw') return 'tw/TW_Report_' + record.id + '_' + record.date + '.pdf';
-return null;
-}
-
-async function removeReportFiles(records) {
-const paths = Array.from(new Set(records.map(getReportStoragePath).filter(Boolean)));
-if (!paths.length) return;
-const { error } = await requireSupabaseClient().storage.from('reports').remove(paths);
-if (error) throw error;
-}
 
 function complianceRecordType(record) {
 const nestedType = Array.isArray(record.questions)
@@ -409,62 +369,8 @@ return [];
 }
 }
 
-function cacheAuditRecords(records) {
-cloudAuditIds = new Set(records.filter(record => record && record.id !== undefined).map(record => String(record.id)));
-cloudAuditPdfIds = new Set();
-const localRecords = [
-...readStoredRecords('tw_audits'),
-...readStoredRecords('puwer_records'),
-...readStoredRecords('havs_records')
-];
-const merged = new Map();
-[...localRecords, ...records].filter(record => record && record.id !== undefined).forEach(record => {
-const id = String(record.id);
-merged.set(id, record);
-});
-const allRecords = Array.from(merged.values());
-audits = allRecords.filter(record => complianceRecordType(record) === 'tw');
-localStorage.setItem('tw_audits', JSON.stringify(audits));
-localStorage.setItem('puwer_records', JSON.stringify(allRecords.filter(record => complianceRecordType(record) === 'puwer')));
-localStorage.setItem('havs_records', JSON.stringify(allRecords.filter(record => complianceRecordType(record) === 'havs')));
-}
-
-async function verifyCloudReportFiles(records) {
-const storage = requireSupabaseClient().storage.from('reports');
-const validIds = new Set();
-const missingRecords = [];
-await Promise.all(records.filter(record => record && record.pdfUrl).map(async record => {
-const objectPath = getReportStoragePath(record);
-if (!objectPath) return;
-const separator = objectPath.lastIndexOf('/');
-const folder = objectPath.slice(0, separator);
-const fileName = objectPath.slice(separator + 1);
-const { data, error } = await storage.list(folder, { search: fileName, limit: 10 });
-if (!error && (data || []).some(file => file.name === fileName)) {
-validIds.add(String(record.id));
-return;
-}
-const response = await fetch(record.pdfUrl, { method: 'HEAD', cache: 'no-store' });
-if (response.ok) validIds.add(String(record.id));
-else if (response.status === 404) missingRecords.push(record);
-else throw new Error(error ? error.message : 'Report PDF check returned HTTP ' + response.status + '.');
-}));
-for (const record of missingRecords) {
-await requireChangedRows(requireSupabaseClient().from('audits').update({ pdfUrl: '' }).eq('id', record.id), 'Clearing a missing report PDF URL');
-record.pdfUrl = '';
-}
-cacheAuditRecords(records);
-cloudAuditPdfIds = validIds;
-}
-
 window.onload = async function() {
-if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-try { supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
-catch (error) { document.getElementById('dbStatusLabel').innerText = 'Sync Warning'; }
-}
-branding = supabaseClient
-? await SharedBranding.load(supabaseClient, branding)
-: SharedBranding.readLocal(branding);
+branding = SharedBranding.readLocal(branding);
 applyBranding();
 await fetchData();
 };
@@ -484,36 +390,10 @@ lucide.createIcons();
 }
 
 async function fetchData() {
-cloudAuditIds = new Set();
-cloudAuditPdfIds = new Set();
-if (supabaseClient) {
-try {
-const { data: c, error: cErr } = await supabaseClient.from('clients').select('*'); 
-if (cErr) throw cErr;
-if (c !== null) { clients = c; localStorage.setItem('tw_clients', JSON.stringify(clients)); }
-
-const { data: s, error: sErr } = await supabaseClient.from('sites').select('*'); 
-if (sErr) throw sErr;
-if (s !== null) { sites = s; localStorage.setItem('tw_sites', JSON.stringify(sites)); }
-
-const { data: a, error: aErr } = await supabaseClient.from('audits').select('*');
-if (aErr) throw aErr;
-if (a !== null) {
-cacheAuditRecords(a);
-await verifyCloudReportFiles(a);
-}
-const { data: links, error: linksErr } = await supabaseClient.from('supervisor_links').select('*').eq('active', true);
-if (linksErr) throw linksErr;
-if (links !== null) {
-supervisorLinks = links;
-localStorage.setItem('supervisor_links', JSON.stringify(supervisorLinks));
-}
-
-document.getElementById('dbStatusLabel').innerText = "Database Connected";
-} catch(e) {
-document.getElementById('dbStatusLabel').innerText = "Sync Warning";
-}
-}
+clients = readStoredRecords('tw_clients');
+sites = readStoredRecords('tw_sites');
+audits = readStoredRecords('tw_audits');
+supervisorLinks = readStoredRecords('supervisor_links');
 populateDropdowns();
 renderDashboard();
 renderComplianceRecords('puwer');
@@ -522,7 +402,7 @@ renderSupervisorLinks();
 }
 
 function clearLocalCacheAndReload() {
-if (confirm("Clear local cache? This will flush local projects/sites and fetch fresh data from your connected Supabase project.")) {
+if (confirm("Clear the locally stored projects, sites, and TW inspection records from this browser?")) {
 localStorage.removeItem('tw_clients');
 localStorage.removeItem('tw_sites');
 localStorage.removeItem('tw_audits');
@@ -675,12 +555,6 @@ row.appendChild(cell);
 });
 const actions = document.createElement('td');
 actions.className = 'p-3 text-right whitespace-nowrap';
-if (!cloudAuditIds.has(String(record.id))) {
-const localOnly = document.createElement('span');
-localOnly.className = 'mr-1 inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-bold text-amber-800';
-localOnly.textContent = 'Device only';
-actions.appendChild(localOnly);
-}
 [
 ['Edit', 'edit-3', () => openComplianceEdit(type, record.id), 'bg-slate-800 hover:bg-slate-700 text-white'],
 ['Delete', 'trash-2', () => deleteComplianceRecord(type, record.id), 'bg-red-50 hover:bg-red-100 text-red-700']
@@ -694,101 +568,15 @@ button.innerHTML = '<i data-lucide="' + icon + '" class="w-3.5 h-3.5"></i><span>
 button.addEventListener('click', action);
 actions.appendChild(button);
 });
-const cloudHasPdf = cloudAuditPdfIds.has(String(record.id));
-if (cloudHasPdf && record.pdfUrl) {
-const uploadedPdf = document.createElement('a');
-uploadedPdf.href = record.pdfUrl;
-uploadedPdf.target = '_blank';
-uploadedPdf.rel = 'noopener';
-uploadedPdf.className = 'inline-flex items-center gap-1 px-2 py-1.5 rounded-lg font-bold text-xs mr-1 bg-blue-600 hover:bg-blue-500 text-white';
-uploadedPdf.title = 'Open the full uploaded field report';
-uploadedPdf.setAttribute('aria-label', 'Open uploaded field report PDF');
-uploadedPdf.innerHTML = '<i data-lucide="file-text" class="w-3.5 h-3.5"></i><span>Full PDF</span>';
-actions.appendChild(uploadedPdf);
-} else {
-const missingPdf = document.createElement('span');
-missingPdf.className = 'mr-1 inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-bold text-amber-800';
-missingPdf.textContent = 'Full PDF unavailable';
-actions.appendChild(missingPdf);
-}
-if (!cloudAuditIds.has(String(record.id)) || !cloudHasPdf) {
-const syncButton = document.createElement('button');
-syncButton.type = 'button';
-syncButton.className = 'mr-1 inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-2 py-1.5 text-xs font-bold text-white hover:bg-emerald-600';
-syncButton.textContent = cloudHasPdf ? 'Sync record' : 'Upload actual PDF';
-syncButton.title = cloudHasPdf ? 'Save this report record to Supabase' : 'Upload the actual inspection PDF from this device';
-syncButton.disabled = !supabaseClient;
-syncButton.addEventListener('click', () => {
-if (cloudHasPdf) {
 syncLocalComplianceReport(type, record);
-return;
-}
-const fileInput = document.createElement('input');
-fileInput.type = 'file';
-fileInput.accept = 'application/pdf,.pdf';
-fileInput.addEventListener('change', () => {
-const file = fileInput.files && fileInput.files[0];
-if (file) syncLocalComplianceReport(type, record, file);
-});
-fileInput.click();
-});
-actions.appendChild(syncButton);
-}
+const reportInfo = document.createElement('span');
+reportInfo.className = 'mr-1 inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-medium text-slate-600';
+reportInfo.textContent = 'PDF downloaded at submission';
+actions.appendChild(reportInfo);
 row.appendChild(actions);
 tbody.appendChild(row);
 });
 lucide.createIcons();
-}
-
-async function syncLocalComplianceReport(type, record, pdfFile) {
-if (!supabaseClient) return;
-if (pdfFile && pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf')) {
-alert('Choose the actual inspection PDF file.');
-return;
-}
-const savedRecord = { ...record, pdfUrl: cloudAuditPdfIds.has(String(record.id)) && !pdfFile ? record.pdfUrl : '' };
-let rowSaved = false;
-try {
-const { error: rowError } = await supabaseClient.from('audits').upsert([savedRecord], { onConflict: 'id' });
-if (rowError) throw rowError;
-rowSaved = true;
-cloudAuditIds.add(String(record.id));
-
-const records = getComplianceRecords(type);
-persistComplianceRecords(type, records.map(item => String(item.id) === String(record.id) ? savedRecord : item));
-if (pdfFile) {
-const folder = type === 'puwer' ? 'puwer' : 'havs';
-const filePath = folder + '/' + record.id + '/' + type.toUpperCase() + '_' + record.id + '.pdf';
-const { error: uploadError } = await supabaseClient.storage.from('reports').upload(filePath, pdfFile, {
-contentType: 'application/pdf',
-upsert: true
-});
-if (uploadError) throw uploadError;
-const { data } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
-if (!data || !data.publicUrl) throw new Error('Supabase did not return the uploaded PDF URL.');
-savedRecord.pdfUrl = data.publicUrl;
-Object.assign(record, savedRecord);
-persistComplianceRecords(type, records.map(item => String(item.id) === String(record.id) ? savedRecord : item));
-}
-
-const { error: saveError } = await supabaseClient.from('audits').upsert([savedRecord], { onConflict: 'id' });
-if (saveError) throw saveError;
-Object.assign(record, savedRecord);
-cloudAuditIds.add(String(record.id));
-if (savedRecord.pdfUrl) cloudAuditPdfIds.add(String(record.id));
-else cloudAuditPdfIds.delete(String(record.id));
-persistComplianceRecords(type, records.map(item => String(item.id) === String(record.id) ? savedRecord : item));
-renderComplianceRecords(type);
-renderDashboard();
-} catch (error) {
-if (rowSaved) {
-Object.assign(record, savedRecord);
-const records = getComplianceRecords(type);
-persistComplianceRecords(type, records.map(item => String(item.id) === String(record.id) ? savedRecord : item));
-renderComplianceRecords(type);
-}
-alert('Could not finish syncing this report: ' + (error.message || error));
-}
 }
 
 function findComplianceRecord(type, id) {
@@ -856,54 +644,24 @@ updated.clientId = matchingSite.clientId;
 updated.siteId = null;
 updated.clientId = matchingClient.id;
 }
-const databaseUpdates = { ...record, ...updated, complianceType: type };
-if (databaseUpdates.score !== '' && Number.isFinite(Number(databaseUpdates.score))) databaseUpdates.score = Number(databaseUpdates.score);
-try {
-const db = requireSupabaseClient();
-await requireChangedRows(db.from('audits').upsert([databaseUpdates], { onConflict: 'id' }), 'Saving this report');
-} catch (error) {
-document.getElementById('complianceEditError').textContent = 'Could not save this report to Supabase: ' + error.message;
-return;
-}
 Object.assign(record, updated);
 record.complianceType = type;
-cloudAuditIds.add(String(id));
-if (databaseUpdates.pdfUrl) cloudAuditPdfIds.add(String(id));
-else cloudAuditPdfIds.delete(String(id));
 persistComplianceRecords(type, getComplianceRecords(type).map(item => String(item.id) === String(id) ? record : item));
 closeComplianceEdit();
 renderComplianceRecords(type);
 renderDashboard();
 }
 
-async function deleteComplianceRecord(type, id) {
+function deleteComplianceRecord(type, id) {
 if (!confirm('Delete this ' + type.toUpperCase() + ' report permanently?')) return;
-const record = findComplianceRecord(type, id);
-try {
-const db = requireSupabaseClient();
-await requireChangedRows(db.from('audits').delete().eq('id', id), 'Deleting this report');
-} catch (error) {
-alert('Could not delete this report from Supabase: ' + error.message);
-return;
-}
-cloudAuditIds.delete(String(id));
-cloudAuditPdfIds.delete(String(id));
 const remaining = getComplianceRecords(type).filter(record => String(record.id) !== String(id));
 persistComplianceRecords(type, remaining);
 renderComplianceRecords(type);
 renderDashboard();
-try {
-if (record) await removeReportFiles([record]);
-} catch (error) {
-alert('The report was deleted, but its Supabase PDF could not be deleted: ' + error.message);
-}
 }
 
-async function generateSupervisorLink(event) {
+function generateSupervisorLink(event) {
 event.preventDefault();
-let db;
-try { db = requireSupabaseClient(); }
-catch (error) { alert(error.message); return; }
 const name = document.getElementById('supervisorName').value.trim();
 const project = document.getElementById('supervisorProject').value;
 if (!name || !project) return;
@@ -914,19 +672,11 @@ token = createSupervisorToken();
 alert('This browser cannot create a secure supervisor link. Open the dashboard over HTTPS and try again.');
 return;
 }
-const linkRecord = { id: token, token, supervisor_name: name, project, created_at: new Date().toISOString(), active: true };
-let error;
-try { ({ error } = await db.from('supervisor_links').insert([linkRecord])); }
-catch (requestError) { alert('Could not save the supervisor link to Supabase: ' + requestError.message); return; }
-if (error) {
-alert('Could not save the revocable link to Supabase. Check that the supervisor_links table and access policies are installed.');
-return;
-}
+const linkRecord = { id: token, token, supervisor_name: name, project, created_at: new Date().toISOString(), active: true, localOnly: true };
 supervisorLinks.push(linkRecord);
 localStorage.setItem('supervisor_links', JSON.stringify(supervisorLinks));
 const baseUrl = window.location.href.split('officerdashboard.html')[0];
 const params = new URLSearchParams({ name, project, token });
-params.set('cloud', '1');
 document.getElementById('generatedSupervisorLink').value = baseUrl + 'supervisor.html?' + params.toString();
 document.getElementById('supervisorLinkOutput').classList.remove('hidden');
 document.getElementById('supervisorCopyStatus').textContent = '';
@@ -955,7 +705,6 @@ cell.textContent = value;
 const linkCell = row.insertCell();
 linkCell.className = 'p-2 max-w-xs truncate';
 const params = new URLSearchParams({ name: link.supervisor_name || link.name || '', project: link.project || '', token: link.token || link.id || '' });
-if (!link.localOnly) params.set('cloud', '1');
 const anchor = document.createElement('a');
 anchor.href = window.location.href.split('officerdashboard.html')[0] + 'supervisor.html?' + params.toString();
 anchor.textContent = 'Open link';
@@ -984,18 +733,8 @@ actionCell.appendChild(button);
 lucide.createIcons();
 }
 
-async function revokeSupervisorLink(token) {
+function revokeSupervisorLink(token) {
 if (!confirm('Revoke this supervisor link? It will no longer open the portal.')) return;
-const link = supervisorLinks.find(item => String(item.token || item.id) === String(token));
-if (!link) return;
-if (!link.localOnly) {
-try {
-await requireChangedRows(requireSupabaseClient().from('supervisor_links').delete().eq('token', token), 'Revoking this supervisor link');
-} catch (error) {
-alert('Could not revoke this link in Supabase: ' + error.message);
-return;
-}
-}
 supervisorLinks = supervisorLinks.filter(item => String(item.token || item.id) !== String(token));
 localStorage.setItem('supervisor_links', JSON.stringify(supervisorLinks));
 renderSupervisorLinks();
@@ -1271,8 +1010,7 @@ tbody.innerHTML += '<tr class="hover:bg-slate-50 border-b border-slate-100">' +
 '<td class="p-3"><span class="font-bold text-sm ' + (a.score >= 80 ? 'text-emerald-700' : 'text-amber-700') + '">' + a.score + '%</span></td>' +
 '<td class="p-3"><span class="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ' + (isClosed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200') + '">' + (isClosed ? 'Closed' : 'Open') + '</span></td>' +
 '<td class="p-3 text-right whitespace-nowrap">' +
-(cloudAuditIds.has(String(a.id)) ? '' : '<span class="mr-1 text-xs font-bold text-amber-700">Device only</span>') +
-(a.pdfUrl ? '<a href="' + a.pdfUrl + '" target="_blank" rel="noopener" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition mr-1 inline-flex items-center gap-1">Full PDF</a>' : '<span class="mr-1 text-xs font-bold text-amber-700">Full PDF unavailable</span>') +
+'<span class="mr-1 text-xs font-medium text-slate-500">PDF downloaded at submission</span>' +
 '<button onclick="openInspectModal(\'' + a.id + '\')" class="bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition mr-1">Review & Close</button>' +
 '<button onclick="emailAuditReport(\'' + a.id + '\')" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition mr-1">Email</button>' +
 '<button onclick="deleteAudit(\'' + a.id + '\')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg font-bold text-xs transition">Delete</button>' +
@@ -1465,24 +1203,6 @@ doc.text('Closure Date: ' + (audit.closedDate || 'N/A'), 14, yPos);
 return doc;
 }
 
-async function uploadPdfToSupabase(audit, pdfBlob) {
-if (!supabaseClient) return null;
-try {
-const fileName = `TW_Report_${audit.id}_${audit.date}.pdf`;
-const filePath = `tw/${fileName}`;
-
-const { data: uploadData, error: uploadError } = await supabaseClient.storage
-.from('reports')
-.upload(filePath, pdfBlob, { contentType: 'application/pdf', upsert: true });
-
-if (uploadError) return null;
-const { data: urlData } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
-return urlData ? urlData.publicUrl : null;
-} catch(err) {
-return null;
-}
-}
-
 async function emailAuditReport(auditId) {
 const audit = audits.find(a => a.id === auditId);
 if (!audit) return;
@@ -1511,25 +1231,11 @@ doc.save(fileName);
 setTimeout(() => window.location.href = `mailto:${c.email || ''}?subject=${encodeURIComponent('TW Report - ' + s.name)}&body=${encodeURIComponent(shareText)}`, 500);
 }
 
-async function deleteAudit(auditId) {
+function deleteAudit(auditId) {
 if (!confirm("Delete this TW inspection record permanently?")) return;
-const audit = audits.find(item => String(item.id) === String(auditId));
-try {
-await requireChangedRows(requireSupabaseClient().from('audits').delete().eq('id', auditId), 'Deleting this inspection');
-} catch (error) {
-alert('Could not delete this inspection from Supabase: ' + error.message);
-return;
-}
 audits = audits.filter(a => String(a.id) !== String(auditId));
-cloudAuditIds.delete(String(auditId));
-cloudAuditPdfIds.delete(String(auditId));
 localStorage.setItem('tw_audits', JSON.stringify(audits));
 renderDashboard();
-try {
-if (audit) await removeReportFiles([audit]);
-} catch (error) {
-alert('The inspection was deleted, but its Supabase PDF could not be deleted: ' + error.message);
-}
 }
 
 function openInspectModal(auditId) {
@@ -1609,7 +1315,7 @@ reader.readAsDataURL(input.files[0]);
 
 async function saveAndCloseReport(btn) {
 const originalText = btn.innerText;
-btn.innerText = "Processing & Uploading PDF..."; btn.disabled = true;
+btn.innerText = "Saving & Downloading PDF..."; btn.disabled = true;
 try {
 const audit = audits.find(a => a.id === activeInspectAuditId);
 if (audit) {
@@ -1635,23 +1341,11 @@ const c = clients.find(x => x.id === updatedAudit.clientId) || { name: 'Project'
 const s = sites.find(x => x.id === updatedAudit.siteId) || { name: 'Site' };
 
 const doc = buildCompletePdfDocument(updatedAudit, c, s);
-const pdfBlob = doc.output('blob');
-const pdfUrl = await uploadPdfToSupabase(updatedAudit, pdfBlob);
-if (!pdfUrl) throw new Error('Supabase did not return the uploaded PDF URL.');
-updatedAudit.pdfUrl = pdfUrl;
-await requireChangedRows(requireSupabaseClient().from('audits').update({
-status: updatedAudit.status,
-questions: updatedAudit.questions,
-closedBy: updatedAudit.closedBy,
-closedDate: updatedAudit.closedDate,
-pdfUrl: updatedAudit.pdfUrl
-}).eq('id', updatedAudit.id), 'Closing this inspection');
+doc.save('TW_Report_' + updatedAudit.id + '_' + updatedAudit.date + '.pdf');
 Object.assign(audit, updatedAudit);
 localStorage.setItem('tw_audits', JSON.stringify(audits));
-cloudAuditIds.add(String(audit.id));
-cloudAuditPdfIds.add(String(audit.id));
 renderDashboard(); closeInspectModal();
-alert("TW Report verified, PDF certificate stored, and marked CLOSED.");
+alert("TW Report marked CLOSED and the updated PDF has been downloaded.");
 }
 } catch (err) { alert(err.message); } finally { btn.innerText = originalText; btn.disabled = false; }
 }
@@ -1705,7 +1399,7 @@ document.getElementById('editClientModal').classList.add('flex');
 }
 function closeEditClientModal() { document.getElementById('editClientModal').classList.add('hidden'); }
 
-async function handleSaveEditClient(e) {
+function handleSaveEditClient(e) {
 e.preventDefault();
 const id = document.getElementById('editClientId').value;
 const c = clients.find(x => x.id === id);
@@ -1715,25 +1409,11 @@ name: document.getElementById('editClientName').value.trim(),
 rep: document.getElementById('editClientRep').value.trim(),
 email: document.getElementById('editClientEmail').value.trim()
 };
-let db;
-try {
-db = requireSupabaseClient();
-await requireChangedRows(db.from('clients').update(updated).eq('id', c.id), 'Updating this project');
-} catch (error) {
-alert('Could not update this project in Supabase: ' + error.message);
-return;
-}
 const previousName = c.name;
 Object.assign(c, updated);
 localStorage.setItem('tw_clients', JSON.stringify(clients));
-try {
-const { error: linksError } = await db.from('supervisor_links').update({ project: updated.name }).eq('project', previousName).select('id');
-if (linksError) throw linksError;
 supervisorLinks = supervisorLinks.map(link => link.project === previousName ? { ...link, project: updated.name } : link);
 localStorage.setItem('supervisor_links', JSON.stringify(supervisorLinks));
-} catch (error) {
-alert('Project saved, but its supervisor links could not be renamed in Supabase: ' + error.message);
-}
 populateDropdowns(); renderDashboard(); renderManageList(); closeEditClientModal();
 }
 
@@ -1752,7 +1432,7 @@ document.getElementById('editSiteModal').classList.add('flex');
 }
 function closeEditSiteModal() { document.getElementById('editSiteModal').classList.add('hidden'); }
 
-async function handleSaveEditSite(e) {
+function handleSaveEditSite(e) {
 e.preventDefault();
 const id = document.getElementById('editSiteId').value;
 const s = sites.find(x => x.id === id);
@@ -1761,76 +1441,35 @@ const updated = {
 clientId: document.getElementById('editSiteClientId').value,
 name: document.getElementById('editSiteName').value.trim()
 };
-let db;
-try {
-db = requireSupabaseClient();
-await requireChangedRows(db.from('sites').update(updated).eq('id', s.id), 'Updating this site');
-} catch (error) {
-alert('Could not update this site in Supabase: ' + error.message);
-return;
-}
 const previousName = s.name;
 Object.assign(s, updated);
 localStorage.setItem('tw_sites', JSON.stringify(sites));
-try {
-const { error: linksError } = await db.from('supervisor_links').update({ project: updated.name }).eq('project', previousName).select('id');
-if (linksError) throw linksError;
 supervisorLinks = supervisorLinks.map(link => link.project === previousName ? { ...link, project: updated.name } : link);
 localStorage.setItem('supervisor_links', JSON.stringify(supervisorLinks));
-} catch (error) {
-alert('Site saved, but its supervisor links could not be renamed in Supabase: ' + error.message);
-}
 populateDropdowns(); renderDashboard(); renderManageList(); closeEditSiteModal();
 }
 
-async function deleteClientOrg(clientId) {
+function deleteClientOrg(clientId) {
 if (!confirm("Are you sure you want to delete this project and all its associated site locations?")) return;
 const purgeAudits = confirm("Click OK to ALSO delete all inspection records for this project, or Cancel to keep historical audit data.");
 const client = clients.find(item => String(item.id) === String(clientId));
 if (!client) return;
-let db;
-let remoteSites;
-let remoteAudits = [];
 const localSites = sites.filter(site => String(site.clientId) === String(clientId));
-let projectNames = Array.from(new Set([client.name, ...localSites.map(site => site.name)].filter(Boolean)));
-try {
-db = requireSupabaseClient();
-const { data: siteRows, error: siteReadError } = await db.from('sites').select('id, clientId, name').eq('clientId', clientId);
-if (siteReadError) throw siteReadError;
-remoteSites = siteRows || [];
-projectNames = Array.from(new Set([...projectNames, ...remoteSites.map(site => site.name)].filter(Boolean)));
-if (purgeAudits) {
-const { data: auditRows, error: auditReadError } = await db.from('audits').select('*');
-if (auditReadError) throw auditReadError;
-const siteIds = new Set([...remoteSites, ...localSites].map(site => String(site.id)));
-remoteAudits = (auditRows || []).filter(audit => String(audit.clientId) === String(clientId) || siteIds.has(String(audit.siteId)));
-await removeReportFiles(remoteAudits);
-if (remoteAudits.length) await requireChangedRows(db.from('audits').delete().in('id', remoteAudits.map(audit => audit.id)), 'Deleting project inspections', true);
-}
-await requireChangedRows(db.from('sites').delete().eq('clientId', clientId), 'Deleting project sites', true);
-if (projectNames.length) await requireChangedRows(db.from('supervisor_links').delete().in('project', projectNames), 'Deleting project supervisor links', true);
-await requireChangedRows(db.from('clients').delete().eq('id', clientId), 'Deleting this project');
-} catch (error) {
-alert('Could not complete the project deletion in Supabase. Some earlier delete steps may have succeeded; reload the dashboard before retrying. Details: ' + error.message);
-return;
-}
+const projectNames = new Set([client.name, ...localSites.map(site => site.name)].filter(Boolean));
 
 clients = clients.filter(c => String(c.id) !== String(clientId));
-const siteIdsToDelete = new Set([...remoteSites, ...localSites].map(site => String(site.id)));
+const siteIdsToDelete = new Set(localSites.map(site => String(site.id)));
 sites = sites.filter(s => String(s.clientId) !== String(clientId));
 if (purgeAudits) {
-const deletedAuditIds = new Set(remoteAudits.map(audit => String(audit.id)));
-const belongsToProject = audit => deletedAuditIds.has(String(audit.id)) || String(audit.clientId) === String(clientId) || siteIdsToDelete.has(String(audit.siteId));
+const belongsToProject = audit => String(audit.clientId) === String(clientId) || siteIdsToDelete.has(String(audit.siteId));
 audits = audits.filter(audit => !belongsToProject(audit));
+localStorage.setItem('tw_audits', JSON.stringify(audits));
 for (const key of ['puwer_records', 'puwer_audits', 'havs_records', 'havs_audits', 'compliance_records']) {
 const records = readStoredRecords(key).filter(audit => !belongsToProject(audit));
 localStorage.setItem(key, JSON.stringify(records));
 }
-deletedAuditIds.forEach(id => cloudAuditIds.delete(id));
-deletedAuditIds.forEach(id => cloudAuditPdfIds.delete(id));
 }
-const deletedProjectNames = new Set(projectNames);
-supervisorLinks = supervisorLinks.filter(link => !deletedProjectNames.has(link.project));
+supervisorLinks = supervisorLinks.filter(link => !projectNames.has(link.project));
 localStorage.setItem('tw_clients', JSON.stringify(clients));
 localStorage.setItem('tw_sites', JSON.stringify(sites));
 localStorage.setItem('tw_audits', JSON.stringify(audits));
@@ -1842,30 +1481,18 @@ renderManageList();
 alert("Project and associated sites deleted successfully.");
 }
 
-async function deleteSiteLocation(siteId) {
+function deleteSiteLocation(siteId) {
 if (!confirm("Remove this site location permanently?")) return;
 const site = sites.find(item => String(item.id) === String(siteId));
-try {
-await requireChangedRows(requireSupabaseClient().from('sites').delete().eq('id', siteId), 'Deleting this site');
-} catch (error) {
-alert('Could not delete this site from Supabase: ' + error.message);
-return;
-}
 sites = sites.filter(s => String(s.id) !== String(siteId));
 localStorage.setItem('tw_sites', JSON.stringify(sites));
-let linkDeleteError = null;
 if (site && site.name) {
-try {
-const { error } = await requireSupabaseClient().from('supervisor_links').delete().eq('project', site.name);
-if (error) throw error;
 supervisorLinks = supervisorLinks.filter(link => link.project !== site.name);
 localStorage.setItem('supervisor_links', JSON.stringify(supervisorLinks));
-} catch (error) { linkDeleteError = error; }
 }
 populateDropdowns();
 renderDashboard();
 renderManageList();
-if (linkDeleteError) alert('The site was deleted, but its supervisor links could not be removed from Supabase: ' + linkDeleteError.message);
 }
 
 function populateDropdowns() {
@@ -1914,42 +1541,26 @@ logoUrl: document.getElementById('inputBrandLogoUrl').value.trim(),
 footerText: document.getElementById('inputBrandFooter').value.trim()
 };
 try {
-if (!supabaseClient) throw new Error('Connect Supabase to share branding across devices.');
-if (nextBranding.logoUrl.startsWith('data:image/')) {
-nextBranding.logoUrl = await SharedBranding.uploadLogo(supabaseClient, nextBranding.logoUrl);
-}
-branding = await SharedBranding.save(supabaseClient, nextBranding);
+branding = await SharedBranding.save(nextBranding);
 applyBranding();
 closeBrandingModal();
-alert('Branding saved to Supabase and will be used by all inspection interfaces and PDFs.');
+alert('Branding saved in this browser and will be used by this browser’s inspection interfaces and PDFs.');
 } catch (error) {
-alert('Branding was not shared to Supabase: ' + (error.message || error));
+alert('Branding could not be saved in this browser: ' + (error.message || error));
 }
 }
 
-async function handleSaveClient(e) {
+function handleSaveClient(e) {
 e.preventDefault();
 const newC = { id: 'c_' + Date.now(), name: document.getElementById('inputClientName').value.trim(), rep: document.getElementById('inputClientRep').value.trim(), email: document.getElementById('inputClientEmail').value.trim() };
-try {
-await requireChangedRows(requireSupabaseClient().from('clients').insert([newC]), 'Creating this project');
-} catch (error) {
-alert('Could not save this project to Supabase: ' + error.message);
-return;
-}
 clients.push(newC);
 localStorage.setItem('tw_clients', JSON.stringify(clients));
 populateDropdowns(); renderDashboard(); closeClientModal();
 }
 
-async function handleSaveSite(e) {
+function handleSaveSite(e) {
 e.preventDefault();
 const newS = { id: 's_' + Date.now(), clientId: document.getElementById('selectSiteClient').value, name: document.getElementById('inputSiteName').value.trim() };
-try {
-await requireChangedRows(requireSupabaseClient().from('sites').insert([newS]), 'Creating this site');
-} catch (error) {
-alert('Could not save this site to Supabase: ' + error.message);
-return;
-}
 sites.push(newS);
 localStorage.setItem('tw_sites', JSON.stringify(sites));
 populateDropdowns(); renderDashboard(); closeSiteModal();

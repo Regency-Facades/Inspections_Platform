@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PUWER Inspection System</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="branding.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
@@ -147,11 +146,10 @@
             <div class="shared-brand-row"><img id="shared-brand-logo" class="shared-brand-logo" alt="Organization logo"><span class="shared-brand-title" id="shared-brand-title"></span></div>
             <span class="header-subtitle" id="header-project">PUWER Inspection</span>
             <span class="header-subtitle" id="header-manager">Setup Required</span>
-            <span class="header-subtitle" id="cloud-status" role="status">Local-only storage</span>
+            <span class="header-subtitle" id="local-status" role="status">Reports download to this device</span>
         </div>
         <div class="header-actions">
             <a id="supervisor-portal-link" class="portal-link" href="supervisor.html" aria-label="Return to Supervisor Portal"><span aria-hidden="true">&larr;</span><span>Portal</span></a>
-            <button id="supabase-retry-upload" class="secondary" type="button" hidden>Retry failed PDF upload</button>
         </div>
     </header>
 
@@ -229,10 +227,6 @@
             stream: null
         };
 
-        let SUPABASE_URL = SharedSupabase.url;
-        let SUPABASE_ANON_KEY = SharedSupabase.anonKey;
-        let supabaseClient = null;
-        let cloudRequired = false;
         let branding = SharedBranding.readLocal();
 
         function applySharedBranding() {
@@ -253,26 +247,9 @@
         function reportLogo() {
             return branding.logoDataUrl || state.setup.logo || '';
         }
-        let lastGeneratedPdfBlob = null;
-        let lastFailedPuwerUpload = null;
-
-        function setCloudStatus(message) {
-            const status = document.getElementById('cloud-status');
+        function setLocalStatus(message) {
+            const status = document.getElementById('local-status');
             if (status) status.textContent = message;
-        }
-
-        function initializeCloudSync() {
-            if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) {
-                setCloudStatus('Local-only storage');
-                return;
-            }
-            try {
-                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                setCloudStatus('Cloud sync ready');
-            } catch (error) {
-                console.warn('Supabase initialization failed:', error);
-                setCloudStatus('Local-only storage');
-            }
         }
 
         function getAuditProjectIds(projectName) {
@@ -298,117 +275,19 @@
                 if (index >= 0) records[index] = audit;
                 else records.push(audit);
                 localStorage.setItem('puwer_records', JSON.stringify(records));
+                return true;
             } catch (error) {
                 console.warn('Could not save PUWER audit locally:', error);
+                return false;
             }
         }
 
-        function getCloudErrorMessage(error) {
-            if (!error) return 'Unknown Supabase error';
-            return [
-                error.message || String(error),
-                error.code ? 'Code: ' + error.code : '',
-                error.details ? 'Details: ' + error.details : '',
-                error.hint ? 'Hint: ' + error.hint : ''
-            ].filter(Boolean).join(' ');
+        function savePuwerAudit(audit) {
+            const saved = savePuwerAuditLocally(audit);
+            setLocalStatus(saved
+                ? 'Report downloaded; inspection saved on this device'
+                : 'Report downloaded; browser storage is full, so inspection details were not saved');
         }
-
-        function isRetryableNetworkError(error) {
-            const message = getCloudErrorMessage(error).toLowerCase();
-            return message.includes('load failed') || message.includes('failed to fetch') || message.includes('networkerror');
-        }
-
-        async function uploadPuwerPdf(audit, pdfBlob, fileName) {
-            if (!supabaseClient) return null;
-            const filePath = 'puwer/' + audit.id + '/PUWER_' + audit.id + '.pdf';
-            const pdfSizeMb = (pdfBlob.size / (1024 * 1024)).toFixed(1);
-            try {
-                const maxAttempts = 3;
-                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                    try {
-                        const uploadRequest = supabaseClient.storage.from('reports').upload(filePath, pdfBlob, {
-                            contentType: 'application/pdf',
-                            upsert: true
-                        });
-                        const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('PDF upload timed out after 30 seconds')), 30000));
-                        const { error } = await Promise.race([uploadRequest, timeout]);
-                        if (error) throw error;
-                        break;
-                    } catch (error) {
-                        if (!isRetryableNetworkError(error) || attempt === maxAttempts) throw error;
-                        setCloudStatus(`Network interrupted; retrying PDF upload (${attempt + 1}/${maxAttempts})...`);
-                        await new Promise(resolve => setTimeout(resolve, attempt * 700));
-                    }
-                }
-                const { data } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
-                return data ? data.publicUrl : null;
-            } catch (error) {
-                throw new Error(`${getCloudErrorMessage(error)} (PDF ${pdfSizeMb} MB; bucket reports; path ${filePath})`);
-            }
-        }
-
-        async function syncPuwerAudit(audit, pdfBlob, fileName) {
-            if (!supabaseClient) {
-                throw new Error('Supabase is unavailable. Check your connection and reload the app.');
-            }
-            savePuwerAuditLocally(audit);
-            let syncStage = 'audit record save';
-            try {
-                const insertRequest = supabaseClient.from('audits').upsert([audit], { onConflict: 'id' }).select('id').single();
-                const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Audit sync timed out after 30 seconds')), 30000));
-                const { data: savedAudit, error } = await Promise.race([insertRequest, timeout]);
-                if (error) throw error;
-                if (!savedAudit || String(savedAudit.id) !== String(audit.id)) {
-                    throw new Error('Supabase did not confirm that the inspection record was saved.');
-                }
-
-                syncStage = 'PDF upload';
-                audit.pdfUrl = await uploadPuwerPdf(audit, pdfBlob, fileName) || '';
-                if (!audit.pdfUrl) throw new Error('Supabase uploaded the PUWER PDF but did not return its public URL.');
-                savePuwerAuditLocally(audit);
-
-                syncStage = 'PDF link save';
-                const { data: linkedAudit, error: linkError } = await supabaseClient.from('audits').update({ pdfUrl: audit.pdfUrl }).eq('id', audit.id).select('id').single();
-                if (linkError) throw linkError;
-                if (!linkedAudit || String(linkedAudit.id) !== String(audit.id)) {
-                    throw new Error('Supabase did not confirm that the report PDF was linked to the inspection.');
-                }
-                setCloudStatus('Audit and PDF synced');
-            } catch (error) {
-                if (syncStage !== 'audit record save') {
-                    lastFailedPuwerUpload = { audit, pdfBlob, fileName };
-                    document.getElementById('supabase-retry-upload').hidden = false;
-                }
-                const message = getCloudErrorMessage(error);
-                console.error('PUWER Supabase ' + syncStage + ' failed:', error);
-                setCloudStatus('Supabase ' + syncStage + ' failed');
-                throw new Error(syncStage + ' failed: ' + message);
-            }
-        }
-
-        async function retryPuwerPdfUpload() {
-            if (!lastFailedPuwerUpload || !supabaseClient) {
-                setCloudStatus('Supabase is unavailable. Check your connection and reload the app.');
-                return;
-            }
-            const pending = lastFailedPuwerUpload;
-            setCloudStatus('Retrying the full PUWER report PDF upload...');
-            try {
-                const pdfUrl = await uploadPuwerPdf(pending.audit, pending.pdfBlob, pending.fileName);
-                if (!pdfUrl) throw new Error('Supabase did not return the uploaded PDF URL.');
-                const { error } = await supabaseClient.from('audits').update({ pdfUrl }).eq('id', pending.audit.id);
-                if (error) throw error;
-                pending.audit.pdfUrl = pdfUrl;
-                savePuwerAuditLocally(pending.audit);
-                lastFailedPuwerUpload = null;
-                document.getElementById('supabase-retry-upload').hidden = true;
-                setCloudStatus('PUWER report and PDF synced');
-            } catch (error) {
-                setCloudStatus('PUWER PDF retry failed: ' + getCloudErrorMessage(error));
-            }
-        }
-
-        document.getElementById('supabase-retry-upload').addEventListener('click', retryPuwerPdfUpload);
 
         const questions = [
             {
@@ -511,18 +390,9 @@
             }
         }
 
-        async function validateSupervisorLink(params) {
+        function validateSupervisorLink(params) {
             const token = params.get('token');
             if (!token) return true;
-            const cloudLink = params.get('cloud') === '1';
-            if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-                try {
-                    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                    const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
-                    if (cloudLink || !error) return !error && Boolean(data);
-                } catch (error) { return false; }
-            }
-            if (cloudLink) return false;
             try {
                 const links = JSON.parse(localStorage.getItem('supervisor_links') || '[]');
                 return links.some(link => String(link.token || link.id) === token && link.active !== false);
@@ -531,17 +401,10 @@
 
         window.onload = async function() {
             const params = new URLSearchParams(window.location.search);
-            cloudRequired = params.get('cloud') === '1';
-            initializeCloudSync();
-            branding = await SharedBranding.load(supabaseClient, branding);
+            branding = await SharedBranding.load(branding);
             applySharedBranding();
             loadSetup();
-            if (cloudRequired && !supabaseClient) {
-                alert('Supabase is unavailable. Check your connection and reload this inspection.');
-                window.location.replace('supervisor.html' + (window.location.search || ''));
-                return;
-            }
-            if (!(await validateSupervisorLink(params))) {
+            if (!validateSupervisorLink(params)) {
                 alert('This supervisor link is invalid or has been revoked.');
                 window.location.replace('supervisor.html' + (window.location.search || ''));
                 return;
@@ -1102,7 +965,6 @@
 
             var fileName = 'PUWER_' + (state.setup.project || 'Report').replace(/\s/g, '_') + '.pdf';
             var pdfBlob = doc.output('blob');
-            lastGeneratedPdfBlob = pdfBlob;
             var projectIds = getAuditProjectIds(state.setup.project || '');
             var safeItems = state.inspectionData.filter(isItemSafe).length;
             var auditId = 'puwer_' + Date.now();
@@ -1140,7 +1002,7 @@
                 pdfUrl: ''
             };
             doc.save(fileName);
-            await syncPuwerAudit(audit, pdfBlob, fileName);
+            savePuwerAudit(audit);
             addAppBubble('📄 Report generated and downloaded successfully!');
         }
 

@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HAVS Daily Briefing</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="branding.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
@@ -247,11 +246,10 @@
             <div class="shared-brand-row"><img id="shared-brand-logo" class="shared-brand-logo" alt="Organization logo"><span class="shared-brand-title" id="shared-brand-title"></span></div>
             <span class="header-subtitle" id="header-project">HAVS Briefing</span>
             <span class="header-subtitle" id="header-manager">Setup Required</span>
-            <span class="header-subtitle" id="cloud-status" role="status">Local-only storage</span>
+            <span class="header-subtitle" id="local-status" role="status">Reports download to this device</span>
         </div>
         <div class="header-actions">
             <a id="supervisor-portal-link" class="portal-link" href="supervisor.html" aria-label="Return to Supervisor Portal"><span aria-hidden="true">&larr;</span><span>Portal</span></a>
-            <button id="supabase-retry-upload" class="secondary" type="button" hidden>Retry failed PDF upload</button>
         </div>
     </header>
     <div id="chat-container"></div>
@@ -320,10 +318,6 @@
             stream: null
         };
 
-        let SUPABASE_URL = SharedSupabase.url;
-        let SUPABASE_ANON_KEY = SharedSupabase.anonKey;
-        let supabaseClient = null;
-        let cloudRequired = false;
         let branding = SharedBranding.readLocal();
 
         function applySharedBranding() {
@@ -344,69 +338,10 @@
         function reportLogo() {
             return branding.logoDataUrl || state.setup.logo || '';
         }
-        let lastFailedHavsUpload = null;
-
-        function setCloudStatus(message) {
-            const status = document.getElementById('cloud-status');
+        function setLocalStatus(message) {
+            const status = document.getElementById('local-status');
             if (status) status.textContent = message;
         }
-
-        function initializeCloudSync() {
-            if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) {
-                setCloudStatus('Local-only storage');
-                return;
-            }
-            try {
-                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                setCloudStatus('Cloud sync ready');
-            } catch (error) {
-                console.warn('Supabase initialization failed:', error);
-                setCloudStatus('Local-only storage');
-            }
-        }
-
-        async function testSupabaseStorage() {
-            if (!supabaseClient) {
-                setCloudStatus('Supabase client is unavailable. Reload the app and try again.');
-                return;
-            }
-            const failedUpload = lastFailedHavsUpload;
-            if (!failedUpload) return;
-            const filePath = failedUpload.filePath;
-            setCloudStatus('Retrying the failed report PDF upload...');
-            try {
-                const client = supabaseClient;
-                const storage = client.storage.from('reports');
-                const testPdf = failedUpload.pdfBlob;
-                const { error: uploadError } = await storage.upload(filePath, testPdf, {
-                    contentType: 'application/pdf',
-                    upsert: true
-                });
-                if (uploadError) throw uploadError;
-                if (failedUpload) {
-                    const { data } = storage.getPublicUrl(filePath);
-                    failedUpload.audit.pdfUrl = data ? data.publicUrl : '';
-                    if (!failedUpload.audit.pdfUrl) throw new Error('PDF uploaded but Supabase did not return its public URL.');
-                    const { error: auditError } = await client.from('audits').upsert([failedUpload.audit], { onConflict: 'id' });
-                    if (auditError) throw auditError;
-                    saveHavsAuditLocally(failedUpload.audit);
-                    lastFailedHavsUpload = null;
-                    document.getElementById('supabase-retry-upload').hidden = true;
-                    setCloudStatus('The failed report PDF and its audit record have now synced successfully.');
-                }
-            } catch (error) {
-                const message = getCloudErrorMessage(error);
-                setCloudStatus(message.toLowerCase().includes('load failed')
-                    ? `Upload failed before Supabase returned an HTTP response (Load failed). (PDF ${(testPdfSize(failedUpload) / (1024 * 1024)).toFixed(1)} MB; bucket reports; path ${filePath})`
-                    : `Report retry failed: ${message} (PDF ${(testPdfSize(failedUpload) / (1024 * 1024)).toFixed(1)} MB; bucket reports; path ${filePath})`);
-            }
-        }
-
-        function testPdfSize(failedUpload) {
-            return failedUpload ? failedUpload.pdfBlob.size : 300 * 1024;
-        }
-
-        document.getElementById('supabase-retry-upload').addEventListener('click', testSupabaseStorage);
 
         function getAuditProjectIds(projectName) {
             function readArray(key) {
@@ -431,116 +366,27 @@
                 if (index >= 0) records[index] = audit;
                 else records.push(audit);
                 localStorage.setItem('havs_records', JSON.stringify(records));
+                return true;
             } catch (error) {
                 console.warn('Could not save HAVS audit locally:', error);
+                return false;
             }
         }
 
-        function getCloudErrorMessage(error) {
-            if (!error) return 'Unknown Supabase error';
-            return [
-                error.message || String(error),
-                error.code ? 'Code: ' + error.code : '',
-                error.details ? 'Details: ' + error.details : '',
-                error.hint ? 'Hint: ' + error.hint : ''
-            ].filter(Boolean).join(' ');
-        }
-
-        function isRetryableNetworkError(error) {
-            const message = getCloudErrorMessage(error).toLowerCase();
-            return message.includes('load failed') || message.includes('failed to fetch') || message.includes('networkerror');
-        }
-
-        async function uploadHavsPdf(audit, pdfBlob, fileName) {
-            if (!supabaseClient) return null;
-            const filePath = 'havs/' + audit.id + '/HAVS_' + audit.id + '.pdf';
-            const pdfSizeMb = (pdfBlob.size / (1024 * 1024)).toFixed(1);
-            try {
-                const maxAttempts = 3;
-                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                    try {
-                        const uploadRequest = supabaseClient.storage.from('reports').upload(filePath, pdfBlob, {
-                            contentType: 'application/pdf',
-                            upsert: true
-                        });
-                        const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('PDF upload timed out after 30 seconds')), 30000));
-                        const { error } = await Promise.race([uploadRequest, timeout]);
-                        if (error) throw error;
-                        break;
-                    } catch (error) {
-                        if (!isRetryableNetworkError(error) || attempt === maxAttempts) throw error;
-                        setCloudStatus(`Network interrupted; retrying PDF upload (${attempt + 1}/${maxAttempts})...`);
-                        await new Promise(resolve => setTimeout(resolve, attempt * 700));
-                    }
-                }
-                const { data } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
-                return data ? data.publicUrl : null;
-            } catch (error) {
-                throw new Error(`${getCloudErrorMessage(error)} (PDF ${pdfSizeMb} MB; bucket reports; path ${filePath})`);
-            }
-        }
-
-        async function syncHavsAudit(audit, pdfBlob, fileName) {
-            lastFailedHavsUpload = null;
-            document.getElementById('supabase-retry-upload').hidden = true;
-            if (!supabaseClient) {
-                throw new Error('Supabase is unavailable. Check your connection and reload the app.');
-            }
-            saveHavsAuditLocally(audit);
-            let syncStage = 'audit record save';
-            try {
-                const insertRequest = supabaseClient.from('audits').upsert([audit], { onConflict: 'id' }).select('id').single();
-                const timeout = new Promise((resolve, reject) => setTimeout(() => reject(new Error('Audit sync timed out after 30 seconds')), 30000));
-                const { data: savedAudit, error } = await Promise.race([insertRequest, timeout]);
-                if (error) throw error;
-                if (!savedAudit || String(savedAudit.id) !== String(audit.id)) {
-                    throw new Error('Supabase did not confirm that the inspection record was saved.');
-                }
-
-                syncStage = 'PDF upload';
-                audit.pdfUrl = await uploadHavsPdf(audit, pdfBlob, fileName) || '';
-                if (!audit.pdfUrl) throw new Error('Supabase uploaded the HAVS PDF but did not return its public URL.');
-                saveHavsAuditLocally(audit);
-
-                syncStage = 'PDF link save';
-                const { data: linkedAudit, error: linkError } = await supabaseClient.from('audits').update({ pdfUrl: audit.pdfUrl }).eq('id', audit.id).select('id').single();
-                if (linkError) throw linkError;
-                if (!linkedAudit || String(linkedAudit.id) !== String(audit.id)) {
-                    throw new Error('Supabase did not confirm that the report PDF was linked to the inspection.');
-                }
-                setCloudStatus('Audit and PDF synced');
-            } catch (error) {
-                if (syncStage !== 'audit record save') {
-                    lastFailedHavsUpload = {
-                        audit,
-                        pdfBlob,
-                        filePath: 'havs/' + audit.id + '/HAVS_' + audit.id + '.pdf'
-                    };
-                    document.getElementById('supabase-retry-upload').hidden = false;
-                }
-                const message = getCloudErrorMessage(error);
-                console.error('HAVS Supabase ' + syncStage + ' failed:', error);
-                setCloudStatus('Supabase ' + syncStage + ' failed');
-                throw new Error(syncStage + ' failed: ' + message);
-            }
+        function saveHavsAudit(audit) {
+            const saved = saveHavsAuditLocally(audit);
+            setLocalStatus(saved
+                ? 'Report downloaded; inspection saved on this device'
+                : 'Report downloaded; browser storage is full, so inspection details were not saved');
         }
 
         const chatContainer = document.getElementById('chat-container');
         const textInput = document.getElementById('text-input');
         const sendBtn = document.getElementById('send-btn');
 
-        async function validateSupervisorLink(params) {
+        function validateSupervisorLink(params) {
             const token = params.get('token');
             if (!token) return true;
-            const cloudLink = params.get('cloud') === '1';
-            if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-                try {
-                    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                    const { data, error } = await client.from('supervisor_links').select('token').eq('token', token).eq('active', true).maybeSingle();
-                    if (cloudLink || !error) return !error && Boolean(data);
-                } catch (error) { return false; }
-            }
-            if (cloudLink) return false;
             try {
                 const links = JSON.parse(localStorage.getItem('supervisor_links') || '[]');
                 return links.some(link => String(link.token || link.id) === token && link.active !== false);
@@ -549,16 +395,9 @@
 
         window.onload = async function() {
             const params = new URLSearchParams(window.location.search);
-            cloudRequired = params.get('cloud') === '1';
-            initializeCloudSync();
-            branding = await SharedBranding.load(supabaseClient, branding);
+            branding = await SharedBranding.load(branding);
             applySharedBranding();
-            if (cloudRequired && !supabaseClient) {
-                alert('Supabase is unavailable. Check your connection and reload this briefing.');
-                window.location.replace('supervisor.html' + (window.location.search || ''));
-                return;
-            }
-            if (!(await validateSupervisorLink(params))) {
+            if (!validateSupervisorLink(params)) {
                 alert('This supervisor link is invalid or has been revoked.');
                 window.location.replace('supervisor.html' + (window.location.search || ''));
                 return;
@@ -1027,7 +866,7 @@
             try {
                 await generatePDF(sigPad.toDataURL());
             } catch (error) {
-                alert('The report was downloaded, but could not be saved to Supabase: ' + error.message);
+                alert('The report could not be completed: ' + error.message);
             }
         };
 
@@ -1222,7 +1061,7 @@
                 pdfUrl: ''
             };
             doc.save(fileName);
-            await syncHavsAudit(audit, pdfBlob, fileName);
+            saveHavsAudit(audit);
             addAppBubble('Report generated. Have a safe shift!');
             state.currentOperative = { name: '', employer: '', area: '', tools: [] };
         }
